@@ -55,7 +55,7 @@ export interface Issue {
 export interface Snapshot {
   version: 1;
   updatedAt: string;
-  mode: 'excel' | 'google';
+  mode: 'excel' | 'google' | 'demo';
   stats: StatRow[];
   ads: AdRow[];
   issues: Issue[];
@@ -64,12 +64,12 @@ export interface Snapshot {
 }
 export const BRANCHES = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова', 'К20'];
 export const COLORS = [
-  '#a8d875',
-  '#73b8f0',
-  '#e5b769',
-  '#ab95ef',
-  '#ed8997',
-  '#82939f',
+  '#fb7185',
+  '#60a5fa',
+  '#fbbf24',
+  '#a78bfa',
+  '#34d399',
+  '#94a3b8',
 ];
 export const METRICS: Record<
   Metric,

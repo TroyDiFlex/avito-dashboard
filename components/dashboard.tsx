@@ -17,6 +17,15 @@ import { Chart, Picker, Spark, Delta } from '@/components/analytics-ui';
 import Comparison from '@/components/comparison';
 import AdExplorer from '@/components/ad-explorer';
 import {
+  browserConnection,
+  browserSnapshot,
+  isGithubPages,
+  saveBrowserConnection,
+  saveBrowserSnapshot,
+} from '@/lib/client-store';
+import { demoSnapshot } from '@/lib/demo';
+import { normalize, type RawPayload } from '@/lib/normalize';
+import {
   scopeBranches,
   scopeHistory,
   SCOPES,
@@ -82,6 +91,11 @@ export default function Dashboard() {
   const [settingNotice, setSettingNotice] = useState('');
 
   async function load(initial = false) {
+    if (isGithubPages()) {
+      const saved = await browserSnapshot().catch(() => null);
+      applySnapshot(saved ?? demoSnapshot(), initial);
+      return;
+    }
     let response = await fetch('/api/snapshot', { cache: 'no-store' });
     // The checked-in application never falls back to a stale data file. The
     // local Excel snapshot is only a development aid and is excluded from Git.
@@ -94,6 +108,10 @@ export default function Dashboard() {
     const value = (await response.json()) as Snapshot;
     if (value.version !== 1 || !Array.isArray(value.stats))
       throw new Error('Не удалось прочитать данные.');
+    applySnapshot(value, initial);
+  }
+
+  function applySnapshot(value: Snapshot, initial = false) {
     setSnapshot(value);
     setLoadError('');
     if (initial) {
@@ -125,13 +143,21 @@ export default function Dashboard() {
   useEffect(() => {
     // oxlint-disable-next-line react/react-compiler -- remote snapshot hydration is an external synchronization.
     load(true).catch((e) => setLoadError(e.message));
-    fetch('/api/settings')
-      .then((r) => r.json() as Promise<{ configured: boolean; url?: string }>)
-      .then((s) => {
-        setConfigured(!!s.configured);
-        if (s.url) setScriptUrl(s.url);
-      })
-      .catch(() => {});
+    if (isGithubPages()) {
+      const connection = browserConnection();
+      queueMicrotask(() => {
+        setConfigured(!!(connection.url && connection.token));
+        if (connection.url) setScriptUrl(connection.url);
+      });
+    } else {
+      fetch('/api/settings')
+        .then((r) => r.json() as Promise<{ configured: boolean; url?: string }>)
+        .then((s) => {
+          setConfigured(!!s.configured);
+          if (s.url) setScriptUrl(s.url);
+        })
+        .catch(() => {});
+    }
   }, []);
   useEffect(() => {
     if (from && to)
@@ -198,6 +224,34 @@ export default function Dashboard() {
     setBusy(true);
     setNotice('Читаем обе таблицы и проверяем новую версию…');
     try {
+      if (isGithubPages()) {
+        const connection = browserConnection();
+        if (!connection.url || !connection.token)
+          throw new Error('Сначала сохраните подключение в настройках.');
+        const response = await fetch(connection.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ token: connection.token }),
+          redirect: 'follow',
+        });
+        if (!response.ok) throw new Error('Apps Script не ответил.');
+        const raw = (await response.json()) as RawPayload & { error?: string };
+        if (raw.error) throw new Error(raw.error);
+        const next = normalize(raw, 'google');
+        const errors = next.issues.filter(
+          (issue) => issue.severity === 'error',
+        );
+        if (errors.length)
+          throw new Error(
+            `Новая версия не сохранена: ${errors.length} строк требуют проверки.`,
+          );
+        await saveBrowserSnapshot(next);
+        applySnapshot(next);
+        setNotice(
+          `Данные обновлены: ${next.ads.length.toLocaleString('ru-RU')} записей. ${next.issues.length ? 'Замечания доступны в проверке данных.' : ''}`,
+        );
+        return;
+      }
       const response = await fetch('/api/refresh', { method: 'POST' });
       const result = (await response.json()) as {
         error: string;
@@ -221,6 +275,27 @@ export default function Dashboard() {
     setBusy(true);
     setSettingNotice('');
     try {
+      if (isGithubPages()) {
+        const url = scriptUrl.trim();
+        const secret = token.trim();
+        if (
+          !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(
+            url,
+          )
+        )
+          throw new Error(
+            'Нужна ссылка Apps Script, заканчивающаяся на /exec.',
+          );
+        if (secret.length < 24)
+          throw new Error('Введите ключ SYNC_TOKEN из свойств скрипта.');
+        saveBrowserConnection(url, secret);
+        setConfigured(true);
+        setToken('');
+        setSettingNotice(
+          'Подключение сохранено в этом браузере. Теперь нажмите «Обновить данные».',
+        );
+        return;
+      }
       const response = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -257,7 +332,11 @@ export default function Dashboard() {
         <div className="header-actions">
           <span className="connection">
             <i className={configured ? 'live' : ''} />
-            {configured ? 'Google-таблицы подключены' : 'Прототип на Excel'}
+            {configured
+              ? 'Google-таблицы подключены'
+              : snapshot?.mode === 'demo'
+                ? 'Демонстрационные данные'
+                : 'Таблицы не подключены'}
           </span>
           <Button
             variant="outline"
@@ -291,7 +370,9 @@ export default function Dashboard() {
                 <br />
                 {snapshot.mode === 'excel'
                   ? 'Снимок Excel'
-                  : 'Обновлено вручную'}{' '}
+                  : snapshot.mode === 'demo'
+                    ? 'Демо-режим'
+                    : 'Обновлено вручную'}{' '}
                 ·{' '}
                 {new Date(snapshot.updatedAt).toLocaleString('ru-RU', {
                   dateStyle: 'short',
@@ -384,6 +465,18 @@ export default function Dashboard() {
               <X size={16} />
             </button>
           </output>
+        )}
+        {snapshot?.mode === 'demo' && !notice && (
+          <div className="demo-strip">
+            <span>
+              <strong>Демо-режим</strong>
+              Все разделы доступны на тестовых данных. Подключите таблицы, чтобы
+              заменить их реальной статистикой.
+            </span>
+            <Button size="sm" onClick={() => setShowSettings(true)}>
+              Подключить таблицы
+            </Button>
+          </div>
         )}
         {loadError && (
           <div className="notice error" role="alert">
