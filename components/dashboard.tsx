@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   ArrowRight,
-  CalendarDays,
   Check,
   Layers3,
   RefreshCw,
@@ -13,7 +12,9 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { Chart, Picker, Spark, Delta } from '@/components/analytics-ui';
+import { Picker } from '@/components/analytics-ui';
+import PeriodPicker from '@/components/period-picker';
+import WeeklyAudit from '@/components/weekly-audit';
 import Comparison from '@/components/comparison';
 import AdExplorer from '@/components/ad-explorer';
 import {
@@ -25,15 +26,7 @@ import {
 } from '@/lib/client-store';
 import { demoSnapshot } from '@/lib/demo';
 import { normalize, type RawPayload } from '@/lib/normalize';
-import {
-  scopeBranches,
-  scopeHistory,
-  SCOPES,
-  GRAINS,
-  timeSeries,
-  scopeLabel,
-  type Grain,
-} from '@/lib/explore';
+import { scopeBranches, scopeHistory, SCOPES } from '@/lib/explore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -45,32 +38,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  BRANCHES,
-  COLORS,
-  METRICS,
-  aggregate,
-  calendar,
-  format,
-  type Metric,
+  validDate,
+  validRange,
+  restorePeriod,
+  dateRangeLabel,
   type Snapshot,
 } from '@/lib/model';
-
-const allMetrics = Object.keys(METRICS) as Metric[];
-const metricChoices = (metrics: Metric[]) =>
-  metrics.map((value) => ({ value, label: METRICS[value].label }));
-const day = 86400000;
-const shift = (iso: string, days: number) =>
-  new Date(new Date(iso + 'T12:00:00Z').getTime() + days * day)
-    .toISOString()
-    .slice(0, 10);
 
 export default function Dashboard() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -79,8 +52,6 @@ export default function Dashboard() {
   const [branch, setBranch] = useState('И31');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [metric, setMetric] = useState<Metric>('contacts');
-  const [grain, setGrain] = useState<Grain>('week');
   const [showSettings, setShowSettings] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [scriptUrl, setScriptUrl] = useState('');
@@ -112,6 +83,17 @@ export default function Dashboard() {
   }
 
   function applySnapshot(value: Snapshot, initial = false) {
+    if (
+      value.version !== 1 ||
+      !Array.isArray(value.stats) ||
+      !Array.isArray(value.ads) ||
+      !Array.isArray(value.issues)
+    )
+      throw new Error(
+        'Не удалось прочитать сохранённые данные. Обновите их из таблиц.',
+      );
+    if (!value.stats.length || value.stats.some((row) => !validDate(row.end)))
+      throw new Error('В статистике нет корректных дат отчётных недель.');
     setSnapshot(value);
     setLoadError('');
     if (initial) {
@@ -123,19 +105,25 @@ export default function Dashboard() {
         branch?: string;
         from?: string;
         to?: string;
-        metric?: Metric;
         tab?: string;
       } = {};
       try {
-        saved = JSON.parse(localStorage.getItem('pik-filters') ?? '{}');
+        const parsed = JSON.parse(localStorage.getItem('pik-filters') ?? '{}');
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+          saved = parsed;
       } catch {
         /* Use defaults. */
       }
-      setFrom(saved.from ?? shift(end, -77));
-      setTo(saved.to ?? end);
+      const min = value.stats.map((s) => s.end).sort()[0];
+      const restored = restorePeriod(saved, min, end);
+      setFrom(restored.from);
+      setTo(restored.to);
+      if (restored.reset)
+        setNotice(
+          'Некорректный сохранённый период сброшен. Показаны последние 12 недель; данные и подключение сохранены.',
+        );
       if (saved.branch && SCOPES.some((s) => s.value === saved.branch))
         setBranch(saved.branch);
-      if (saved.metric && METRICS[saved.metric]) setMetric(saved.metric);
       if (saved.tab && ['stats', 'compare', 'ads'].includes(saved.tab))
         setTab(saved.tab);
     }
@@ -160,56 +148,25 @@ export default function Dashboard() {
     }
   }, []);
   useEffect(() => {
-    if (from && to)
+    if (validRange(from, to))
       try {
         localStorage.setItem(
           'pik-filters',
-          JSON.stringify({ branch, from, to, metric, tab }),
+          JSON.stringify({ branch, from, to, tab }),
         );
       } catch {
         /* Storage is optional. */
       }
-  }, [branch, from, to, metric, tab]);
+  }, [branch, from, to, tab]);
 
   const branchStats = useMemo(
     () => (snapshot ? scopeHistory(snapshot.stats, branch) : []),
     [snapshot, branch],
   );
-  const current = useMemo(
-    () => branchStats.filter((s) => s.end >= from && s.end <= to),
-    [branchStats, from, to],
-  );
-  const dates = useMemo(
-    () =>
-      calendar(
-        from,
-        to,
-        current.map((s) => s.end),
-      ),
-    [from, to, current],
-  );
-  const duration =
-    from && to
-      ? Math.round((new Date(to).getTime() - new Date(from).getTime()) / day) +
-        7
-      : 84;
-  const previous = useMemo(
-    () =>
-      from && to
-        ? branchStats.filter(
-            (s) =>
-              s.end >= shift(from, -duration) && s.end <= shift(to, -duration),
-          )
-        : [],
-    [branchStats, from, to, duration],
-  );
-  const comparisonBaseComplete =
-    current.length > 0 &&
-    previous.length === current.length &&
-    current.every((s) =>
-      previous.some((p) => p.end === shift(s.end, -duration)),
-    );
-  const statsChart = timeSeries(branchStats, metric, grain, from, to);
+  const bounds = useMemo(() => {
+    const dates = snapshot?.stats.map((s) => s.end).sort() ?? [];
+    return { min: dates[0] ?? '', max: dates.at(-1) ?? '' };
+  }, [snapshot]);
   const relevantIssues =
     snapshot?.issues.filter(
       (i) =>
@@ -315,8 +272,6 @@ export default function Dashboard() {
     }
   }
 
-  const latest = current.at(-1);
-
   return (
     <div className="dashboard">
       <header className="masthead">
@@ -354,19 +309,14 @@ export default function Dashboard() {
       <main>
         <div className="page-heading">
           <div>
-            <div className="eyebrow">АВИТО / СТАТИСТИКА СЕТИ</div>
-            <h1>Статистика Авито</h1>
+            <div className="eyebrow">ПИК / АВИТО</div>
+            <h1>Еженедельный аудит</h1>
           </div>
           <div className="snapshot-meta">
             {snapshot && (
               <>
                 Последний период:{' '}
-                <strong>
-                  {snapshot.stats
-                    .map((s) => s.end)
-                    .sort()
-                    .at(-1)}
-                </strong>
+                <strong>{dateRangeLabel(bounds.max, bounds.max)}</strong>
                 <br />
                 {snapshot.mode === 'excel'
                   ? 'Снимок Excel'
@@ -386,7 +336,7 @@ export default function Dashboard() {
           <TabsList variant="line" className="main-tabs">
             <TabsTrigger value="stats">
               <Activity />
-              Статистика
+              Недельный аудит
             </TabsTrigger>
             <TabsTrigger value="compare">
               <Layers3 />
@@ -408,47 +358,25 @@ export default function Dashboard() {
               items={SCOPES}
             />
           </div>
-          <div className="filter-field range">
-            <span>
-              <CalendarDays size={13} /> Даты окончания отчётных периодов
-            </span>
-            <div className="dates">
-              <Input
-                type="date"
-                aria-label="Первый период"
-                value={from}
-                max={to}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-              <span>—</span>
-              <Input
-                type="date"
-                aria-label="Последний период"
-                value={to}
-                min={from}
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="quick-ranges">
-            {[4, 12, 26].map((n) => (
-              <button
-                key={n}
-                onClick={() => {
-                  const end = snapshot?.stats
-                    .map((s) => s.end)
-                    .sort()
-                    .at(-1);
-                  if (end) {
-                    setTo(end);
-                    setFrom(shift(end, -(n - 1) * 7));
-                  }
-                }}
-              >
-                {n} нед.
-              </button>
-            ))}
-          </div>
+          {snapshot && from && to && (
+            <PeriodPicker
+              key={from + to + bounds.min + bounds.max}
+              from={from}
+              to={to}
+              min={bounds.min}
+              max={bounds.max}
+              onApply={(start, end) => {
+                if (
+                  validRange(start, end) &&
+                  start >= bounds.min &&
+                  end <= bounds.max
+                ) {
+                  setFrom(start);
+                  setTo(end);
+                }
+              }}
+            />
+          )}
           <button
             className="quality-button"
             onClick={() => setShowIssues(true)}
@@ -495,176 +423,12 @@ export default function Dashboard() {
         {snapshot && (
           <>
             {tab === 'stats' && (
-              <>
-                <div className="kpi-grid">
-                  {(
-                    ['views', 'contacts', 'spend', 'contactCost'] as Metric[]
-                  ).map((m) => (
-                    <button
-                      key={m}
-                      className={`kpi ${metric === m ? 'selected' : ''}`}
-                      onClick={() => setMetric(m)}
-                    >
-                      <span className="kpi-label">
-                        {METRICS[m].label}
-                        <ArrowRight size={16} />
-                      </span>
-                      <strong>{format(aggregate(current, m), m)}</strong>
-                      <div className="kpi-bottom">
-                        <Delta
-                          current={aggregate(current, m)}
-                          previous={
-                            comparisonBaseComplete
-                              ? aggregate(previous, m)
-                              : null
-                          }
-                          metric={m}
-                        />
-                        <Spark
-                          values={dates.map(
-                            (d) =>
-                              current.find((s) => s.end === d)?.metrics[m] ??
-                              null,
-                          )}
-                        />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <section className="panel main-chart">
-                  <div className="panel-heading">
-                    <div>
-                      <div className="eyebrow">{scopeLabel(branch)}</div>
-                      <h2>{METRICS[metric].label}</h2>
-                    </div>
-                    <div className="chart-selectors">
-                      <Picker
-                        label="Масштаб времени"
-                        value={grain}
-                        onChange={(v) => setGrain(v as Grain)}
-                        items={GRAINS}
-                      />
-                      <Picker
-                        label="Показатель графика"
-                        value={metric}
-                        onChange={(v) => setMetric(v as Metric)}
-                        items={metricChoices(allMetrics)}
-                      />
-                    </div>
-                  </div>
-                  <Chart
-                    data={statsChart}
-                    series={[
-                      {
-                        key: 'value',
-                        label: scopeLabel(branch),
-                        color: COLORS[BRANCHES.indexOf(branch)] ?? COLORS[0],
-                      },
-                    ]}
-                    metric={metric}
-                    grain={grain}
-                  />
-                  <div className="chart-foot">
-                    <span>
-                      <i
-                        style={{
-                          background:
-                            COLORS[BRANCHES.indexOf(branch)] ?? COLORS[0],
-                        }}
-                      />
-                      {scopeLabel(branch)}
-                    </span>
-                    <span>
-                      {grain === 'week'
-                        ? 'Пропуски показаны разрывами'
-                        : 'Недели отнесены к месяцу или году по дате окончания'}{' '}
-                      · «Статистика»
-                    </span>
-                  </div>
-                </section>
-                <section className="panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>Все показатели</h2>
-                      <p>
-                        Суммы за выбранные периоды; остатки и рейтинг — на
-                        последнюю дату.
-                      </p>
-                    </div>
-                    <span className="pill">{current.length} периодов</span>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Показатель</TableHead>
-                        <TableHead className="num">
-                          За период / на дату
-                        </TableHead>
-                        <TableHead className="num">Предыдущий период</TableHead>
-                        <TableHead className="num">Изменение</TableHead>
-                        <TableHead className="num">Динамика</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allMetrics.map((m) => (
-                        <TableRow
-                          key={m}
-                          className={metric === m ? 'selected-row' : ''}
-                        >
-                          <TableCell>
-                            <button
-                              className="metric-link"
-                              onClick={() => setMetric(m)}
-                            >
-                              {METRICS[m].label}
-                              {METRICS[m].kind === 'last' && (
-                                <small>На {latest?.end ?? '—'}</small>
-                              )}
-                            </button>
-                          </TableCell>
-                          <TableCell className="num strong">
-                            {format(aggregate(current, m), m)}
-                          </TableCell>
-                          <TableCell className="num muted">
-                            {format(
-                              comparisonBaseComplete
-                                ? aggregate(previous, m)
-                                : null,
-                              m,
-                            )}
-                          </TableCell>
-                          <TableCell className="num">
-                            <Delta
-                              current={aggregate(current, m)}
-                              previous={
-                                comparisonBaseComplete
-                                  ? aggregate(previous, m)
-                                  : null
-                              }
-                              metric={m}
-                            />
-                          </TableCell>
-                          <TableCell className="num">
-                            <Spark
-                              values={dates.map(
-                                (d) =>
-                                  current.find((s) => s.end === d)?.metrics[
-                                    m
-                                  ] ?? null,
-                              )}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <p className="table-note">
-                    ROI показан как в исходной таблице, на последнюю дату. Его
-                    формула и связь маржи с Авито ещё не подтверждены. Неполная
-                    база сравнения не подменяется нулями.
-                  </p>
-                </section>
-              </>
+              <WeeklyAudit
+                rows={branchStats}
+                scope={branch}
+                from={from}
+                to={to}
+              />
             )}
             {tab === 'compare' && (
               <Comparison snapshot={snapshot} from={from} to={to} />
@@ -744,8 +508,9 @@ export default function Dashboard() {
             />
           </label>
           <p className="muted small">
-            Ключ сохраняется на сервере и не возвращается в браузер. Дашборд
-            предназначен для закрытого доступа.
+            {isGithubPages()
+              ? 'Подключение и загруженные данные сохраняются в этом браузере на вашем устройстве.'
+              : 'Ключ сохраняется на сервере и не возвращается в браузер.'}
           </p>
           {settingNotice && <output className="notice">{settingNotice}</output>}
           <Button disabled={busy} onClick={saveSettings}>

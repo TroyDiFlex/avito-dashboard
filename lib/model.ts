@@ -287,6 +287,18 @@ export function aggregate(
     ? (rows.at(-1)!.metrics[metric] ?? null)
     : sum(ms, metric);
 }
+const numberFormats = new Map<string, Intl.NumberFormat>();
+const shortDateFormat = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'UTC',
+});
+const fullDateFormat = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
 export function format(
   value: number | null | undefined,
   metric: Metric,
@@ -295,11 +307,17 @@ export function format(
   if (value == null || !Number.isFinite(value)) return '—';
   const { unit } = METRICS[metric];
   const v = unit === 'percent' ? value * 100 : value;
-  const text = new Intl.NumberFormat('ru-RU', {
-    maximumFractionDigits: unit === 'count' ? 0 : 1,
-    minimumFractionDigits: unit === 'decimal' ? 1 : 0,
-    notation: compact ? 'compact' : 'standard',
-  }).format(v);
+  const key = `${unit}:${compact}`;
+  let formatter = numberFormats.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('ru-RU', {
+      maximumFractionDigits: unit === 'count' ? 0 : 1,
+      minimumFractionDigits: unit === 'decimal' ? 1 : 0,
+      notation: compact ? 'compact' : 'standard',
+    });
+    numberFormats.set(key, formatter);
+  }
+  const text = formatter.format(v);
   return (
     text +
     (unit === 'percent'
@@ -312,24 +330,81 @@ export function format(
   );
 }
 export function shortDate(iso: string): string {
-  return new Date(iso + 'T12:00:00Z').toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: 'UTC',
-  });
+  return validDate(iso)
+    ? shortDateFormat.format(new Date(iso + 'T12:00:00Z'))
+    : '—';
+}
+export const DAY = 86400000;
+export function validDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
+  const time = Date.parse(value + 'T12:00:00Z');
+  return (
+    Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value
+  );
+}
+// A reporting dashboard must never allocate an unbounded calendar from user input.
+export function validRange(start: unknown, end: unknown): boolean {
+  return (
+    validDate(start) &&
+    validDate(end) &&
+    start <= end &&
+    Date.parse(end) - Date.parse(start) <= 3660 * DAY
+  );
+}
+export function shiftDate(iso: string, days: number): string {
+  if (!validDate(iso) || !Number.isFinite(days)) return '';
+  const time = Date.parse(iso + 'T12:00:00Z') + days * DAY;
+  if (!Number.isFinite(time) || Math.abs(time) > 8640000000000000) return '';
+  const result = new Date(time).toISOString().slice(0, 10);
+  return validDate(result) ? result : '';
+}
+export function restorePeriod(saved: unknown, min: string, max: string) {
+  const value =
+    saved && typeof saved === 'object'
+      ? (saved as { from?: unknown; to?: unknown })
+      : {};
+  const valid =
+    validRange(value.from, value.to) &&
+    (value.from as string) >= min &&
+    (value.to as string) <= max;
+  return {
+    from: valid
+      ? (value.from as string)
+      : [min, shiftDate(max, -77)].sort().at(-1)!,
+    to: valid ? (value.to as string) : max,
+    reset: !valid && !!(value.from || value.to),
+  };
+}
+export function dateRangeLabel(from: string, to: string): string {
+  const full = (date: string) =>
+    validDate(date)
+      ? fullDateFormat.format(new Date(date + 'T12:00:00Z'))
+      : '—';
+  return from === to ? full(from) : `${full(from)} — ${full(to)}`;
 }
 export function calendar(
   start: string,
   end: string,
   observed: string[] = [],
 ): string[] {
-  if (!start || !end || start > end) return [];
-  const dates = new Set(observed.filter((d) => d >= start && d <= end));
-  // Keep the user's exact period endpoints and add missing weekly ticks as gaps.
-  const d = new Date(end + 'T12:00:00Z');
-  while (d.toISOString().slice(0, 10) >= start) {
-    dates.add(d.toISOString().slice(0, 10));
-    d.setUTCDate(d.getUTCDate() - 7);
+  if (!validRange(start, end)) return [];
+  const known = [
+    ...new Set(observed.filter((d) => validDate(d) && d >= start && d <= end)),
+  ].sort();
+  const dates = new Set(known);
+  // Anchor ticks to actual report dates, not an arbitrary date typed by the user.
+  const anchor = known.at(-1) ?? end;
+  const first = Date.parse(start + 'T12:00:00Z'),
+    last = Date.parse(end + 'T12:00:00Z');
+  const base = Date.parse(anchor + 'T12:00:00Z');
+  const offset = Math.ceil((first - base) / (7 * DAY));
+  for (
+    let time = base + offset * 7 * DAY, tick = 0;
+    time <= last && tick < 524;
+    time += 7 * DAY, tick++
+  ) {
+    dates.add(new Date(time).toISOString().slice(0, 10));
   }
   return [...dates].sort();
 }

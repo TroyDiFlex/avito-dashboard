@@ -110,9 +110,19 @@ export function Delta({
   previous: number | null;
   metric: Metric;
 }) {
-  if (current == null || previous == null || previous === 0)
+  if (current == null || previous == null)
     return <span className="delta neutral">Нет базы сравнения</span>;
-  const difference = ((current - previous) / Math.abs(previous)) * 100;
+  const percentagePoints = METRICS[metric].unit === 'percent';
+  const difference = percentagePoints
+    ? (current - previous) * 100
+    : previous === 0
+      ? current === 0
+        ? 0
+        : null
+      : ((current - previous) / Math.abs(previous)) * 100;
+  if (difference == null) return <span className="delta neutral">Было 0</span>;
+  if (difference === 0)
+    return <span className="delta neutral">Без изменений</span>;
   const good =
     METRICS[metric].good === 'neutral' || difference === 0
       ? 'neutral'
@@ -129,7 +139,7 @@ export function Delta({
       {Math.abs(difference).toLocaleString('ru-RU', {
         maximumFractionDigits: 1,
       })}
-      %
+      {percentagePoints ? ' п.п.' : '%'}
     </span>
   );
 }
@@ -148,7 +158,14 @@ export function Chart({
   indexed?: boolean;
   grain?: Grain;
 }) {
-  if (!data.length)
+  if (
+    !data.length ||
+    !data.some((row) =>
+      series.some(
+        (s) => typeof row[s.key] === 'number' && Number.isFinite(row[s.key]),
+      ),
+    )
+  )
     return <div className="empty-chart">За выбранный период нет данных</div>;
   return (
     <figure className="chart" aria-label={`График: ${METRICS[metric].label}`}>

@@ -1,6 +1,7 @@
 import {
   aggregate,
   calendar,
+  validRange,
   METRICS,
   type AdRow,
   type Metric,
@@ -59,11 +60,15 @@ export function bucketDates(
   grain: Grain,
   observed: string[],
 ): string[] {
-  if (!from || !to || from > to) return [];
+  if (!validRange(from, to)) return [];
   if (grain === 'week') return calendar(from, to, observed);
   const dates: string[] = [];
   const d = new Date(bucket(from, grain) + 'T12:00:00Z');
-  while (d.toISOString().slice(0, 10) <= bucket(to, grain)) {
+  for (
+    let tick = 0;
+    tick < 122 && d.getTime() <= Date.parse(bucket(to, grain) + 'T12:00:00Z');
+    tick++
+  ) {
     dates.push(d.toISOString().slice(0, 10));
     if (grain === 'month') d.setUTCMonth(d.getUTCMonth() + 1);
     else d.setUTCFullYear(d.getUTCFullYear() + 1);

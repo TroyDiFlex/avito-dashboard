@@ -15,11 +15,24 @@ for (const name of ['model', 'normalize', 'explore']) {
     .outputText.replaceAll("'./model'", "'./model.js'");
   await fs.writeFile(`private/compiled/${name}.js`, output);
 }
-const { aggregate, calendar, number } =
-  await import('../private/compiled/model.js');
+const {
+  aggregate,
+  calendar,
+  number,
+  validDate,
+  validRange,
+  shiftDate,
+  restorePeriod,
+} = await import('../private/compiled/model.js');
 const { parseAd } = await import('../private/compiled/normalize.js');
-const { distribution, extractArticle, scopeHistory, searchUrl, timeSeries } =
-  await import('../private/compiled/explore.js');
+const {
+  distribution,
+  extractArticle,
+  scopeHistory,
+  searchUrl,
+  timeSeries,
+  bucketDates,
+} = await import('../private/compiled/explore.js');
 assert.equal(number('15 499 ₽'), 15499);
 assert.equal(number('н/д'), null);
 assert.equal(number('0'), 0);
@@ -159,4 +172,69 @@ assert.deepEqual(distribution([1, 2, 10, null]), {
 });
 console.log(
   'Passed: data layouts, weighted aggregation, city totals, time grains, missing values, article extraction and safe Avito links.',
+);
+
+// Regressions: typing a year or restoring it must never build a huge calendar.
+const started = performance.now();
+for (const [from, to] of [
+  ['0002-08-01', '2026-09-07'],
+  ['2026-09-07', '9999-09-07'],
+  ['2026-09-07', '2026-08-01'],
+  ['', '2026-09-07'],
+  ['2026-02-30', '2026-09-07'],
+  ['2026-09-01', 'no-date'],
+  ['+100000-09-01', '+100001-09-01'],
+]) {
+  assert.equal(validRange(from, to), false);
+  assert.deepEqual(calendar(from, to), []);
+  for (const grain of ['week', 'month', 'year']) {
+    assert.deepEqual(bucketDates(from, to, grain, []), []);
+    assert.deepEqual(timeSeries([], 'views', grain, from, to), []);
+  }
+  const restored = restorePeriod({ from, to }, '2025-01-06', '2026-09-07');
+  assert.equal(restored.to, '2026-09-07');
+  assert.equal(restored.from, '2026-06-22');
+  assert.equal(restored.reset, true);
+}
+assert.ok(
+  performance.now() - started < 1000,
+  'Bad date regressions must finish within one second',
+);
+assert.equal(validDate('2024-02-29'), true);
+assert.equal(validDate('2026-02-29'), false);
+assert.equal(validDate(null), false);
+assert.equal(shiftDate('2026-01-05', -7), '2025-12-29');
+assert.equal(shiftDate('bad', -7), '');
+assert.deepEqual(restorePeriod(null, '2026-08-03', '2026-09-07'), {
+  from: '2026-08-03',
+  to: '2026-09-07',
+  reset: false,
+});
+assert.deepEqual(
+  restorePeriod(
+    { from: '2026-08-03', to: '2026-08-31' },
+    '2026-08-03',
+    '2026-09-07',
+  ),
+  { from: '2026-08-03', to: '2026-08-31', reset: false },
+);
+assert.deepEqual(
+  calendar('2026-08-01', '2026-08-31', [
+    '2026-08-03',
+    '2026-08-17',
+    '2026-08-31',
+  ]),
+  ['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31'],
+);
+assert.deepEqual(
+  calendar('2026-08-01', '2026-08-30', [
+    '2026-08-03',
+    '2026-08-17',
+    '2026-08-24',
+  ]),
+  ['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24'],
+);
+assert.ok(calendar('2016-09-07', '2026-09-07').length <= 524);
+console.log(
+  'Passed: malformed dates, extreme years, safe filter recovery, weekly tick alignment and bounded history.',
 );

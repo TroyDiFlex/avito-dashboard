@@ -41,7 +41,10 @@ export async function saveBrowserSnapshot(snapshot: Snapshot) {
 
 export function browserConnection() {
   try {
-    return JSON.parse(localStorage.getItem('pik-connection') ?? '{}') as {
+    const saved = JSON.parse(localStorage.getItem('pik-connection') ?? '{}');
+    return (
+      saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+    ) as {
       url?: string;
       token?: string;
     };

@@ -48,7 +48,10 @@ const defaultPanels: Panel[] = [
 function savedComparison(): SavedComparison {
   if (typeof window === 'undefined') return {};
   try {
-    return JSON.parse(localStorage.getItem('pik-comparison') ?? '{}');
+    const saved = JSON.parse(localStorage.getItem('pik-comparison') ?? '{}');
+    return saved && typeof saved === 'object' && !Array.isArray(saved)
+      ? saved
+      : {};
   } catch {
     return {};
   }
@@ -68,11 +71,12 @@ export default function Comparison({
 }) {
   const initial = savedComparison();
   const validPanels =
-    initial.panels?.length &&
+    Array.isArray(initial.panels) &&
     initial.panels.length >= 2 &&
     initial.panels.length <= 6 &&
     initial.panels.every(
       (panel) =>
+        panel &&
         SCOPES.some((scope) => scope.value === panel.scope) &&
         METRICS[panel.metric],
     )

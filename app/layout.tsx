@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 export const metadata: Metadata = {
-  title: 'ПИК · Аналитика Авито',
-  description: 'Статистика подразделений и история объявлений',
+  title: 'ПИК · Еженедельный аудит Авито',
+  description: 'Недельная динамика рекламы, маржи, репутации и объявлений',
   robots: { index: false, follow: false },
 };
 export default function RootLayout({
