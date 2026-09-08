@@ -1,0 +1,1 @@
+CREATE INDEX `idx_snapshot_chunks_snapshot_ordinal` ON `snapshot_chunks` (`snapshot`,`ordinal`);
