@@ -10,8 +10,8 @@ function initialize() {
   if (!properties.getProperty('SYNC_TOKEN')) {
     properties.setProperty('SYNC_TOKEN', Utilities.getUuid() + Utilities.getUuid());
   }
-  // Request read access during the owner's first manual execution.
-  sourceIds().forEach(function(id) { SpreadsheetApp.openById(id).getName(); });
+  // Request read-only access during the owner's first manual execution.
+  sourceIds().forEach(function(id) { Sheets.Spreadsheets.get(id, { fields: 'properties.title' }); });
   console.log('Готово. Ключ SYNC_TOKEN находится в настройках проекта → Свойства скрипта.');
 }
 
@@ -23,23 +23,31 @@ function doPost(e) {
     var expected = PropertiesService.getScriptProperties().getProperty('SYNC_TOKEN');
     if (!expected || typeof request.token !== 'string' || !equalToken(request.token, expected)) return output({ error: 'Неверный ключ подключения.' });
     var books = sourceIds().map(function(id) {
-      var spreadsheet = SpreadsheetApp.openById(id);
-      var timezone = spreadsheet.getSpreadsheetTimeZone();
-      var sheets = spreadsheet.getSheets().filter(function(sheet) {
-        return sheet.getName() === 'Статистика' || /^Детализация(?:\s|$)/i.test(sheet.getName());
-      }).map(function(sheet) {
-        var lastRow = sheet.getLastRow(), lastColumn = sheet.getLastColumn();
-        if (lastRow > 100000 || lastColumn > 300) throw new Error('Размер листа требует проверки: ' + sheet.getName());
-        var rows = lastRow && lastColumn ? sheet.getRange(1, 1, lastRow, lastColumn).getValues() : [];
-        rows = rows.map(function(row) {
-          var values = row.map(function(v) { return v instanceof Date ? Utilities.formatDate(v, timezone, 'yyyy-MM-dd') : v === '' ? null : v; });
-          while (values.length && values[values.length - 1] === null) values.pop();
-          return values;
-        });
-        while (rows.length && !rows[rows.length - 1].length) rows.pop();
-        return { name: sheet.getName(), rows: rows };
+      var spreadsheet = Sheets.Spreadsheets.get(id, {
+        fields: 'properties.title,sheets.properties(title,gridProperties(rowCount,columnCount))'
       });
-      return { name: spreadsheet.getName(), sheets: sheets };
+      var selected = spreadsheet.sheets.filter(function(sheet) {
+        var name = sheet.properties.title;
+        return name === 'Статистика' || /^Детализация(?:\s|$)/i.test(name);
+      });
+      selected.forEach(function(sheet) {
+        var grid = sheet.properties.gridProperties;
+        if (grid.rowCount > 100000 || grid.columnCount > 300) {
+          throw new Error('Размер листа требует проверки: ' + sheet.properties.title);
+        }
+      });
+      var ranges = selected.map(function(sheet) {
+        return "'" + sheet.properties.title.replace(/'/g, "''") + "'";
+      });
+      var values = Sheets.Spreadsheets.Values.batchGet(id, {
+        ranges: ranges,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+        dateTimeRenderOption: 'SERIAL_NUMBER'
+      }).valueRanges || [];
+      var sheets = selected.map(function(sheet, index) {
+        return { name: sheet.properties.title, rows: values[index] && values[index].values || [] };
+      });
+      return { name: spreadsheet.properties.title, sheets: sheets };
     });
     return output({ books: books, exportedAt: new Date().toISOString() });
   } catch (error) { return output({ error: 'Не удалось прочитать таблицы: ' + error.message }); }
