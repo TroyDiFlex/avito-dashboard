@@ -64,19 +64,19 @@ export interface Snapshot {
 }
 export const BRANCHES = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова', 'К20'];
 export const COLORS = [
-  '#8b5cf6',
+  '#ef3340',
   '#22c55e',
   '#38bdf8',
   '#f59e0b',
-  '#f43f5e',
+  '#a78bfa',
   '#94a3b8',
 ];
 export const BRANCH_COLORS: Record<string, string> = {
-  'И31': '#8b5cf6',
+  'И31': '#ef3340',
   'Х7': '#22c55e',
   'Автово': '#38bdf8',
   'Б116': '#f59e0b',
-  'Ворошилова': '#f43f5e',
+  'Ворошилова': '#a78bfa',
   'К20': '#94a3b8',
 };
 export const METRICS: Record<
