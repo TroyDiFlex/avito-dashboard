@@ -46,7 +46,7 @@ registerHooks({
   },
 });
 
-const { default: Overview, tableModeAfterBranchClick } = await import('../components/overview.tsx');
+const { default: Overview } = await import('../components/overview.tsx');
 const { METRICS } = await import('../lib/model.ts');
 const branches = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
 const row = (branch, end, contacts) => ({
@@ -89,7 +89,8 @@ assert.equal((html.match(/class="matrix-group"/g) || []).length, 4);
 assert.equal((html.match(/class="history-group"/g) || []).length, 0);
 assert.ok(html.includes('overview-table-panel'));
 assert.ok(html.includes('Результаты подразделений'));
-assert.ok(html.includes('История подразделения'));
+assert.ok(html.includes('Все подразделения'));
+assert.ok(!html.includes('История подразделения'));
 assert.ok(!html.includes('focus-panel'));
 for (const branch of branches) assert.ok(html.includes(branch));
 for (const metric of Object.values(METRICS)) {
@@ -102,7 +103,4 @@ for (const metric of Object.values(METRICS)) {
 assert.ok(html.includes('125'));
 assert.ok(html.includes('100'));
 assert.ok(!html.includes('NaN') && !html.includes('Infinity'));
-assert.equal(tableModeAfterBranchClick('results', 'И31', 'И31'), 'history');
-assert.equal(tableModeAfterBranchClick('history', 'И31', 'Х7'), 'history');
-assert.equal(tableModeAfterBranchClick('history', 'И31', 'И31'), 'results');
 console.log('Passed: one switchable overview table, five branches and all metrics render.');

@@ -299,31 +299,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-weight: 600;
   letter-spacing: -.025em;
 }
-.matrix-period { color: #898992; font-size: 12px; }
 .overview-table-panel { overflow: hidden; }
 .overview-table-heading { min-height: 58px; padding: 9px 16px; }
-.overview-table-heading > div:first-child { min-width: 0; }
-.overview-table-heading p { margin-top: 4px; font-size: 12px; }
-.overview-mode-tabs { display: flex; align-items: center; gap: 3px; }
-.overview-mode-tabs > button {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  color: #777780;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -.015em;
-}
-.overview-mode-tabs > button:hover { color: #d8d8dc; background: #17171c; }
-.overview-mode-tabs > button.active { color: #fff; background: #27232f; }
-.mode-branch { display: inline-flex; align-items: center; gap: 6px; color: #d8d8dc; }
-.mode-branch::before { width: 1px; height: 14px; margin-right: 1px; content: ''; background: #4b4753; }
-.mode-branch i, .overview-branch-tabs i { width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.overview-table-heading h2 { font-size: 15px; letter-spacing: -.01em; }
+.overview-branch-tabs i { width: 7px; height: 7px; flex: none; border-radius: 50%; }
 .overview-branch-tabs { flex: none; }
 .overview-branch-tabs button { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 9px; font-size: 12px; }
 .matrix-scroll, .history-scroll, .table-scroll { overflow-x: auto; }
@@ -488,9 +467,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .week-summary span { text-align: left; }
   .section-heading, .focus-heading, .comparison-controls, .catalog-header, .part-heading { align-items: flex-start; flex-direction: column; }
   .overview-table-heading { gap: 8px; }
-  .overview-mode-tabs { width: 100%; overflow-x: auto; }
-  .overview-mode-tabs > button { flex: none; }
-  .overview-branch-tabs { width: 100%; }
+  .overview-branch-tabs { width: 100%; overflow-x: auto; }
   .focus-heading { padding: 16px; }
   .branch-tabs { width: 100%; overflow-x: auto; }
   .chart { height: 280px; }

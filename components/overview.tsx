@@ -40,14 +40,6 @@ const GROUPS: { title: string; metrics: Metric[] }[] = [
 const ALL_METRICS = GROUPS.flatMap((group) => group.metrics);
 type TableMode = 'results' | 'history';
 
-export function tableModeAfterBranchClick(
-  mode: TableMode,
-  currentBranch: string,
-  clickedBranch: string,
-): TableMode {
-  return mode === 'history' && currentBranch === clickedBranch ? 'results' : 'history';
-}
-
 function delta(
   current: number | null | undefined,
   previous: number | null | undefined,
@@ -135,13 +127,8 @@ export default function Overview({
   }));
 
   function openBranch(name: string) {
-    const nextMode = tableModeAfterBranchClick(tableMode, branch, name);
-    if (nextMode === 'results') {
-      setTableMode('results');
-      return;
-    }
     onBranchChange(name);
-    setTableMode(nextMode);
+    setTableMode('history');
   }
 
   if (!latest) return <div className="loading-state">За выбранный период нет данных.</div>;
@@ -163,55 +150,38 @@ export default function Overview({
 
       <section className="matrix-panel overview-table-panel">
         <div className="section-heading overview-table-heading">
-          <div>
-            <div className="overview-mode-tabs" role="tablist" aria-label="Режим таблицы">
+          <h2>
+            {tableMode === 'results'
+              ? 'Результаты подразделений'
+              : `История · ${branch}`}
+          </h2>
+          <div
+            className="branch-tabs overview-branch-tabs"
+            role="tablist"
+            aria-label="Подразделение"
+          >
+            <button
+              role="tab"
+              aria-selected={tableMode === 'results'}
+              aria-label="Все подразделения"
+              className={tableMode === 'results' ? 'active' : ''}
+              onClick={() => setTableMode('results')}
+            >
+              Все
+            </button>
+            {BRANCHES.map((name) => (
               <button
+                key={name}
                 role="tab"
-                aria-selected={tableMode === 'results'}
-                className={tableMode === 'results' ? 'active' : ''}
-                onClick={() => setTableMode('results')}
+                aria-selected={tableMode === 'history' && name === branch}
+                className={tableMode === 'history' && name === branch ? 'active' : ''}
+                onClick={() => openBranch(name)}
               >
-                Результаты подразделений
+                <i style={{ background: BRANCH_COLORS[name] }} />
+                {name}
               </button>
-              <button
-                role="tab"
-                aria-selected={tableMode === 'history'}
-                className={tableMode === 'history' ? 'active' : ''}
-                onClick={() => setTableMode('history')}
-              >
-                История подразделения
-                {tableMode === 'history' && (
-                  <span className="mode-branch">
-                    <i style={{ background: BRANCH_COLORS[branch] }} />{branch}
-                  </span>
-                )}
-              </button>
-            </div>
-            <p>
-              {tableMode === 'results'
-                ? 'Нажмите на подразделение — его история откроется в этой же таблице.'
-                : 'Нажмите на активное подразделение ещё раз, чтобы вернуться к общим результатам.'}
-            </p>
+            ))}
           </div>
-          {tableMode === 'results' ? (
-            <span className="matrix-period">{shortDate(previous)} → {shortDate(latest)}</span>
-          ) : (
-            <div className="branch-tabs overview-branch-tabs" aria-label="Подразделение">
-              {BRANCHES.map((name) => (
-                <button
-                  key={name}
-                  className={name === branch ? 'active' : ''}
-                  onClick={() => openBranch(name)}
-                  title={name === branch
-                    ? 'Вернуться к результатам подразделений'
-                    : `Открыть историю ${name}`}
-                >
-                  <i style={{ background: BRANCH_COLORS[name] }} />
-                  {name}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
         {tableMode === 'results' ? (
           <div className="matrix-scroll">
