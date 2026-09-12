@@ -3,12 +3,8 @@ import type { Snapshot } from './model';
 const DB_NAME = 'pik-avito-dashboard';
 const STORE = 'data';
 
-export function isGithubPages() {
-  return (
-    typeof window !== 'undefined' &&
-    (window.location.hostname.endsWith('.github.io') ||
-      import.meta.env.VITE_STATIC_DEPLOY === '1')
-  );
+export function isStaticApp() {
+  return typeof window !== 'undefined';
 }
 
 function database(): Promise<IDBDatabase> {

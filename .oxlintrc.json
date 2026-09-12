@@ -7,8 +7,7 @@
     "oxc",
     "react",
     "import",
-    "jsx-a11y",
-    "nextjs"
+    "jsx-a11y"
   ],
   "categories": {
     "correctness": "error"
@@ -23,16 +22,13 @@
     "typeCheck": true
   },
   "ignorePatterns": [
-    ".next/**",
-    ".vinext/**",
     "out/**",
     "build/**",
     "dist/**",
     "docs/**",
     "coverage/**",
     "components/ui/**",
-    "hooks/**",
-    "next-env.d.ts"
+    "hooks/**"
   ],
   "rules": {
     "no-array-constructor": "error",

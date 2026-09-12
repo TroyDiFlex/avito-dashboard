@@ -28,7 +28,7 @@ import { Input } from '@/components/ui/input';
 import {
   browserConnection,
   browserSnapshot,
-  isGithubPages,
+  isStaticApp,
   saveBrowserConnection,
   saveBrowserSnapshot,
 } from '@/lib/client-store';
@@ -99,7 +99,7 @@ export default function Dashboard() {
   }
 
   async function load(initial = false) {
-    if (isGithubPages()) {
+    if (isStaticApp()) {
       const saved = await browserSnapshot().catch(() => null);
       applySnapshot(saved ?? demoSnapshot(), initial);
       return;
@@ -119,7 +119,7 @@ export default function Dashboard() {
     load(true).catch((error) => {
       setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить данные.');
     });
-    if (isGithubPages()) {
+    if (isStaticApp()) {
       const connection = browserConnection();
       queueMicrotask(() => {
         setConfigured(Boolean(connection.url && connection.token));
@@ -164,7 +164,7 @@ export default function Dashboard() {
     setBusy(true);
     setNotice('Читаем таблицы и проверяем новую неделю…');
     try {
-      if (isGithubPages()) {
+      if (isStaticApp()) {
         const connection = browserConnection();
         if (!connection.url || !connection.token) {
           throw new Error('Сначала сохраните подключение.');
@@ -205,7 +205,7 @@ export default function Dashboard() {
     setBusy(true);
     setSettingNotice('');
     try {
-      if (isGithubPages()) {
+      if (isStaticApp()) {
         const url = scriptUrl.trim();
         const secret = token.trim();
         if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url)) {
