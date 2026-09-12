@@ -16,16 +16,7 @@ import {
   type Metrics,
   type Snapshot,
 } from '@/lib/model';
-import { adKey, extractArticle, scopeBranches } from '@/lib/explore';
-
-const ACTIVE_SCOPES = [
-  { value: 'network', label: 'Все подразделения' },
-  { value: 'И31', label: 'И31' },
-  { value: 'Х7', label: 'Х7' },
-  { value: 'Автово', label: 'Автово' },
-  { value: 'Б116', label: 'Б116' },
-  { value: 'Ворошилова', label: 'Ворошилова' },
-];
+import { adKey, extractArticle } from '@/lib/explore';
 const metricChoices = AD_METRICS.map((value) => ({
   value,
   label: METRICS[value].label,
@@ -119,22 +110,36 @@ export default function PartExplorer({
   from,
   to,
   initialScope,
+  availableBranches,
 }: {
   snapshot: Snapshot;
   from: string;
   to: string;
   initialScope: string;
+  availableBranches: string[];
 }) {
   const allParts = useMemo(() => buildParts(snapshot), [snapshot]);
+  const scopes = useMemo(
+    () => [
+      { value: 'network', label: 'Все подразделения' },
+      ...availableBranches.map((value) => ({ value, label: value })),
+    ],
+    [availableBranches],
+  );
   const [scope, setScope] = useState(
-    ACTIVE_SCOPES.some((item) => item.value === initialScope)
+    initialScope === 'network' || availableBranches.includes(initialScope)
       ? initialScope
       : 'network',
   );
   const [metric, setMetric] = useState<Metric>('contacts');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
-  const branches = scopeBranches(scope);
+  const effectiveScope =
+    scope === 'network' || availableBranches.includes(scope) ? scope : 'network';
+  const branches = useMemo(
+    () => (effectiveScope === 'network' ? availableBranches : [effectiveScope]),
+    [availableBranches, effectiveScope],
+  );
   const parts = useMemo(
     () =>
       allParts
@@ -158,9 +163,7 @@ export default function PartExplorer({
         .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity)),
     [allParts, branches, from, to, metric, search],
   );
-  const selectedPart = selected
-    ? allParts.find((part) => part.key === selected)
-    : null;
+  const selectedPart = selected ? parts.find((part) => part.key === selected) : null;
 
   if (selectedPart) {
     return (
@@ -193,7 +196,7 @@ export default function PartExplorer({
             aria-label="Поиск объявлений"
           />
         </div>
-        <Picker label="Подразделение" value={scope} onChange={setScope} items={ACTIVE_SCOPES} />
+        <Picker label="Подразделение" value={effectiveScope} onChange={setScope} items={scopes} />
         <Picker
           label="Показатель"
           value={metric}

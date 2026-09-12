@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import {
   browserConnection,
   browserSnapshot,
@@ -35,7 +36,14 @@ import {
 } from '@/lib/client-store';
 import { demoSnapshot } from '@/lib/demo';
 import { scopeBranches } from '@/lib/explore';
-import { restorePeriod, validDate, validRange, type Snapshot } from '@/lib/model';
+import {
+  BRANCHES,
+  BRANCH_COLORS,
+  restorePeriod,
+  validDate,
+  validRange,
+  type Snapshot,
+} from '@/lib/model';
 import { normalize, type RawPayload } from '@/lib/normalize';
 
 type Tab = 'overview' | 'dynamics' | 'ads';
@@ -44,7 +52,19 @@ const TITLES: Record<Tab, string> = {
   dynamics: 'Динамика',
   ads: 'Объявления',
 };
-const ACTIVE_BRANCHES = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
+const DEFAULT_VISIBLE_BRANCHES = BRANCHES.filter((branch) => branch !== 'К20');
+
+function storedVisibleBranches() {
+  if (typeof window === 'undefined') return DEFAULT_VISIBLE_BRANCHES;
+  try {
+    const saved = JSON.parse(localStorage.getItem('pik-visible-branches') ?? 'null');
+    if (!Array.isArray(saved)) return DEFAULT_VISIBLE_BRANCHES;
+    const valid = BRANCHES.filter((branch) => saved.includes(branch));
+    return valid.length ? valid : DEFAULT_VISIBLE_BRANCHES;
+  } catch {
+    return DEFAULT_VISIBLE_BRANCHES;
+  }
+}
 
 function Sidebar({
   tab,
@@ -101,7 +121,7 @@ function Sidebar({
           <TriangleAlert /><span>Проверка данных</span>
           {issueCount > 0 && <b>{issueCount}</b>}
         </button>
-        <button onClick={onShowSettings}><Settings2 /><span>Подключение</span></button>
+        <button onClick={onShowSettings}><Settings2 /><span>Настройки</span></button>
         <span className="connection-state">
           <i className={configured ? 'online' : ''} />
           <span>
@@ -142,6 +162,7 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [settingNotice, setSettingNotice] = useState('');
+  const [visibleBranches, setVisibleBranches] = useState(storedVisibleBranches);
 
   function applySnapshot(value: Snapshot, initial = false) {
     if (
@@ -171,7 +192,7 @@ export default function Dashboard() {
     const restored = restorePeriod(saved, min, max);
     setFrom(restored.from);
     setTo(restored.to);
-    if (saved.branch && ACTIVE_BRANCHES.includes(saved.branch)) setBranch(saved.branch);
+    if (saved.branch && visibleBranches.includes(saved.branch)) setBranch(saved.branch);
     if (saved.tab === 'overview' || saved.tab === 'dynamics' || saved.tab === 'ads') {
       setTab(saved.tab);
     }
@@ -196,6 +217,7 @@ export default function Dashboard() {
     applySnapshot((await response.json()) as Snapshot, initial);
   }
 
+  // oxlint-disable react-hooks/exhaustive-deps -- Initial external load intentionally runs once.
   useEffect(() => {
     // oxlint-disable-next-line react/react-compiler -- Loading persisted external state is intentional.
     load(true).catch((error) => {
@@ -217,6 +239,7 @@ export default function Dashboard() {
         .catch(() => {});
     }
   }, []);
+  // oxlint-enable react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!validRange(from, to)) return;
@@ -227,6 +250,27 @@ export default function Dashboard() {
     }
   }, [branch, from, to, tab]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('pik-visible-branches', JSON.stringify(visibleBranches));
+    } catch {
+      /* Device preferences are optional. */
+    }
+  }, [visibleBranches]);
+
+  function toggleBranchVisibility(name: string) {
+    if (visibleBranches.includes(name)) {
+      if (visibleBranches.length === 1) return;
+      const next = visibleBranches.filter((branchName) => branchName !== name);
+      setVisibleBranches(next);
+      if (branch === name) setBranch(next[0]);
+      return;
+    }
+    setVisibleBranches(
+      BRANCHES.filter((branchName) => visibleBranches.includes(branchName) || branchName === name),
+    );
+  }
+
   const bounds = useMemo(() => {
     const dates = snapshot?.stats.map((row) => row.end).sort() ?? [];
     return { min: dates[0] ?? '', max: dates.at(-1) ?? '' };
@@ -234,7 +278,8 @@ export default function Dashboard() {
   const relevantIssues =
     snapshot?.issues.filter(
       (issue) =>
-        (!issue.branch || scopeBranches(branch).includes(issue.branch)) &&
+        (!issue.branch ||
+          (visibleBranches.includes(issue.branch) && scopeBranches(branch).includes(issue.branch))) &&
         (!issue.end || (issue.end >= from && issue.end <= to)),
     ) ?? [];
 
@@ -400,9 +445,17 @@ export default function Dashboard() {
                 to={to}
                 branch={branch}
                 onBranchChange={setBranch}
+                branches={visibleBranches}
               />
             )}
-            {tab === 'dynamics' && <Comparison snapshot={snapshot} from={from} to={to} />}
+            {tab === 'dynamics' && (
+              <Comparison
+                snapshot={snapshot}
+                from={from}
+                to={to}
+                availableBranches={visibleBranches}
+              />
+            )}
             {tab === 'ads' && (
               <PartExplorer
                 key={branch}
@@ -410,6 +463,7 @@ export default function Dashboard() {
                 from={from}
                 to={to}
                 initialScope="network"
+                availableBranches={visibleBranches}
               />
             )}
           </div>
@@ -419,32 +473,60 @@ export default function Dashboard() {
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="settings-dialog">
           <DialogHeader>
-            <DialogTitle>Подключение таблиц</DialogTitle>
+            <DialogTitle>Настройки</DialogTitle>
             <DialogDescription>
-              Укажите опубликованный Apps Script и ключ. После этого обновление выполняется одной кнопкой.
+              Выберите подразделения для отчётов и настройте подключение к таблицам.
             </DialogDescription>
           </DialogHeader>
-          <label htmlFor="source-url">
-            <span>Ссылка веб-приложения</span>
-            <Input
-              id="source-url"
-              value={scriptUrl}
-              onChange={(event) => setScriptUrl(event.target.value)}
-              placeholder="https://script.google.com/macros/s/…/exec"
-            />
-          </label>
-          <label htmlFor="source-token">
-            <span>Ключ SYNC_TOKEN</span>
-            <Input
-              id="source-token"
-              type="password"
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-              placeholder={configured ? 'Введите только для изменения' : 'Ключ из свойств скрипта'}
-            />
-          </label>
-          {settingNotice && <output className="dialog-notice">{settingNotice}</output>}
-          <Button disabled={busy} onClick={saveSettings}><Check />Сохранить подключение</Button>
+          <section className="settings-section">
+            <div className="settings-section-heading">
+              <h3>Отображаемые подразделения</h3>
+              <p>Скрытые подразделения не показываются в отчётах и фильтрах.</p>
+            </div>
+            <div className="settings-branches">
+              {BRANCHES.map((name) => {
+                const checked = visibleBranches.includes(name);
+                return (
+                  <label className="settings-branch-row" key={name}>
+                    <span><i style={{ background: BRANCH_COLORS[name] }} />{name}</span>
+                    <Switch
+                      checked={checked}
+                      disabled={checked && visibleBranches.length === 1}
+                      onCheckedChange={() => toggleBranchVisibility(name)}
+                      aria-label={`${checked ? 'Скрыть' : 'Показать'} ${name}`}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+          <section className="settings-section connection-settings">
+            <div className="settings-section-heading">
+              <h3>Подключение таблиц</h3>
+              <p>Параметры источника данных.</p>
+            </div>
+            <label htmlFor="source-url">
+              <span>Ссылка веб-приложения</span>
+              <Input
+                id="source-url"
+                value={scriptUrl}
+                onChange={(event) => setScriptUrl(event.target.value)}
+                placeholder="https://script.google.com/macros/s/…/exec"
+              />
+            </label>
+            <label htmlFor="source-token">
+              <span>Ключ SYNC_TOKEN</span>
+              <Input
+                id="source-token"
+                type="password"
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                placeholder={configured ? 'Введите только для изменения' : 'Ключ из свойств скрипта'}
+              />
+            </label>
+            {settingNotice && <output className="dialog-notice">{settingNotice}</output>}
+            <Button disabled={busy} onClick={saveSettings}><Check />Сохранить подключение</Button>
+          </section>
         </DialogContent>
       </Dialog>
 

@@ -15,7 +15,6 @@ import {
 } from '@/lib/model';
 import { scopeHistory, timeSeries } from '@/lib/explore';
 
-const BRANCHES = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
 const GROUPS: { title: string; metrics: Metric[] }[] = [
   {
     title: 'Воронка и реклама',
@@ -89,32 +88,34 @@ export default function Overview({
   to,
   branch,
   onBranchChange,
+  branches,
 }: {
   snapshot: Snapshot;
   from: string;
   to: string;
   branch: string;
   onBranchChange: (branch: string) => void;
+  branches: string[];
 }) {
   const [metric, setMetric] = useState<Metric>('contacts');
   const [tableMode, setTableMode] = useState<TableMode>('results');
   const histories = useMemo(
     () =>
       Object.fromEntries(
-        BRANCHES.map((name) => [name, scopeHistory(snapshot.stats, name)]),
+        branches.map((name) => [name, scopeHistory(snapshot.stats, name)]),
       ) as Record<string, StatRow[]>,
-    [snapshot],
+    [branches, snapshot],
   );
   const visibleDates = [
     ...new Set(
-      BRANCHES.flatMap((name) => histories[name].map((row) => row.end)).filter(
+      branches.flatMap((name) => histories[name].map((row) => row.end)).filter(
         (date) => date >= from && date <= to,
       ),
     ),
   ].sort();
   const latest = visibleDates.at(-1) ?? '';
   const previous = latest ? shiftDate(latest, -7) : '';
-  const focusRows = histories[branch] ?? histories['И31'];
+  const focusRows = histories[branch] ?? histories[branches[0]] ?? [];
   const historyDates = focusRows
     .map((row) => row.end)
     .filter((date) => date >= from && date <= to)
@@ -142,7 +143,7 @@ export default function Overview({
           <p>Под значением показано изменение к неделе {shortDate(previous)}.</p>
         </div>
         <div className="week-summary">
-          <span>Подразделений<strong>5</strong></span>
+          <span>Подразделений<strong>{branches.length}</strong></span>
           <span>Показателей<strong>{ALL_METRICS.length}</strong></span>
           <span>История<strong>{visibleDates.length} нед.</strong></span>
         </div>
@@ -169,7 +170,7 @@ export default function Overview({
             >
               Все
             </button>
-            {BRANCHES.map((name) => (
+            {branches.map((name) => (
               <button
                 key={name}
                 role="tab"
@@ -189,7 +190,7 @@ export default function Overview({
               <thead>
                 <tr>
                   <th>Показатель</th>
-                  {BRANCHES.map((name) => (
+                  {branches.map((name) => (
                     <th key={name}>
                       <button onClick={() => openBranch(name)}>
                         <i style={{ background: BRANCH_COLORS[name] }} />
@@ -210,6 +211,7 @@ export default function Overview({
                     previous={previous}
                     onMetricChange={setMetric}
                     selectedMetric={metric}
+                    branches={branches}
                   />
                 ))}
               </tbody>
@@ -275,6 +277,7 @@ function GroupRows({
   previous,
   selectedMetric,
   onMetricChange,
+  branches,
 }: {
   title: string;
   metrics: Metric[];
@@ -283,14 +286,15 @@ function GroupRows({
   previous: string;
   selectedMetric: Metric;
   onMetricChange: (metric: Metric) => void;
+  branches: string[];
 }) {
   return (
     <>
-      <tr className="matrix-group"><th colSpan={6}>{title}</th></tr>
+      <tr className="matrix-group"><th colSpan={branches.length + 1}>{title}</th></tr>
       {metrics.map((metric) => (
         <tr key={metric} className={selectedMetric === metric ? 'metric-selected' : ''}>
           <th><button onClick={() => onMetricChange(metric)}>{METRICS[metric].label}</button></th>
-          {BRANCHES.map((name) => {
+          {branches.map((name) => {
             const current = rowAt(histories[name], latest)?.metrics[metric];
             const before = rowAt(histories[name], previous)?.metrics[metric];
             return (

@@ -13,7 +13,6 @@ import {
 } from '@/lib/model';
 import { scopeHistory, timeSeries } from '@/lib/explore';
 
-const BRANCHES = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
 const DEFAULT_METRICS: Metric[] = ['impressions', 'contacts'];
 const metricChoices = (Object.keys(METRICS) as Metric[]).map((value) => ({
   value,
@@ -24,17 +23,23 @@ export default function Comparison({
   snapshot,
   from,
   to,
+  availableBranches,
 }: {
   snapshot: Snapshot;
   from: string;
   to: string;
+  availableBranches: string[];
 }) {
   const [metrics, setMetrics] = useState<Metric[]>(DEFAULT_METRICS);
-  const [branches, setBranches] = useState(BRANCHES);
+  const [selectedBranches, setSelectedBranches] = useState(availableBranches);
   const [indexed, setIndexed] = useState(false);
+  const visibleSelection = selectedBranches.filter((branch) =>
+    availableBranches.includes(branch),
+  );
+  const branches = visibleSelection.length ? visibleSelection : [availableBranches[0]];
 
   function toggleBranch(branch: string) {
-    setBranches((current) =>
+    setSelectedBranches((current) =>
       current.includes(branch)
         ? current.length === 1
           ? current
@@ -73,7 +78,7 @@ export default function Comparison({
       </section>
 
       <section className="branch-filter" aria-label="Подразделения на графиках">
-        {BRANCHES.map((branch) => (
+        {availableBranches.map((branch) => (
           <button
             key={branch}
             className={branches.includes(branch) ? 'active' : ''}

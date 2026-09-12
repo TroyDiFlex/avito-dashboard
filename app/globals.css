@@ -435,11 +435,23 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .account-cards strong { color: #eeeef0; font-size: 15px; font-weight: 600; }
 
 .settings-dialog, .issues-dialog { background: #131316 !important; border-color: #303037 !important; }
-.settings-dialog { max-width: 510px !important; }
+.settings-dialog { max-width: 510px !important; max-height: min(88vh, 760px); overflow-y: auto; }
 .settings-dialog label { display: grid; gap: 6px; }
 .settings-dialog label span { color: #a1a1aa; font-size: 13px; }
 .settings-dialog input { color: #fff; background: #0c0c0e; border-color: #303037; }
-.settings-dialog > button { color: #fff !important; background: #df2633 !important; }
+.settings-section { display: grid; gap: 12px; }
+.settings-section + .settings-section { padding-top: 18px; border-top: 1px solid #292930; }
+.settings-section-heading { display: grid; gap: 3px; }
+.settings-section-heading h3 { color: #eeeef0; font-size: 14px; font-weight: 600; }
+.settings-section-heading p { color: #777780; font-size: 12px; line-height: 1.45; }
+.settings-branches { overflow: hidden; border: 1px solid #292930; border-radius: 10px; }
+.settings-dialog .settings-branch-row { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 9px 12px; background: #101013; cursor: pointer; }
+.settings-dialog .settings-branch-row + .settings-branch-row { border-top: 1px solid #24242a; }
+.settings-dialog .settings-branch-row > span { display: flex; align-items: center; gap: 9px; color: #dddde2; }
+.settings-branch-row i { width: 8px; height: 8px; border-radius: 50%; }
+.settings-branch-row [data-slot="switch"] { cursor: pointer; }
+.settings-branch-row [data-slot="switch"][data-disabled] { cursor: not-allowed; }
+.connection-settings > button { color: #fff !important; background: #df2633 !important; }
 .dialog-notice { color: #ff6670; font-size: 13px; }
 .issues-dialog { max-width: 650px !important; }
 .issues-list { max-height: 60vh; overflow-y: auto; display: grid; gap: 9px; }
