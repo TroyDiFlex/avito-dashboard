@@ -92,8 +92,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .brand {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 0 6px 24px;
+  padding: 3px 12px 25px;
   text-align: left;
   background: transparent;
   border: 0;
@@ -158,7 +157,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 
 .sidebar-toggle { margin-top: 6px; border-top: 1px solid #202025 !important; border-radius: 0 !important; }
 .sidebar.collapsed { width: 72px; padding-right: 12px; padding-left: 12px; }
-.sidebar.collapsed .brand { justify-content: center; padding-right: 0; padding-left: 0; }
+.sidebar.collapsed .brand { display: none; }
 .sidebar.collapsed .brand > span,
 .sidebar.collapsed nav button > span,
 .sidebar.collapsed .sidebar-footer button > span,
@@ -357,8 +356,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .history-table tbody td:last-child { color: #fff; background: rgba(139, 92, 246, .06); font-weight: 650; }
 .trend-panel { margin-top: 18px; background: #101013; border: 1px solid #222228; border-radius: 15px; overflow: hidden; }
 .chart { width: 100%; height: 330px; margin: 0; padding: 14px 4px 10px 0; }
+.chart .recharts-surface:focus { outline: none; }
 .empty-chart, .empty-table { min-height: 220px; display: grid; place-items: center; color: #777780; }
-.picker { min-width: 180px; height: 36px !important; color: #d6d6da !important; background: #17171c !important; border-color: #2c2c33 !important; font-size: 13px !important; }
+.picker { min-width: 180px; height: 36px !important; padding: 0 12px 0 14px !important; color: #d6d6da !important; background: #17171c !important; border-color: #2c2c33 !important; font-size: 13px !important; }
 
 .comparison-page, .ads-page, .part-detail { display: grid; gap: 22px; }
 .comparison-controls { padding: 4px 0 0; }

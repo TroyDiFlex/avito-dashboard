@@ -13,7 +13,6 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import BrandMark from '@/components/brand-mark';
 import Comparison from '@/components/comparison';
 import Overview from '@/components/overview';
 import PartExplorer from '@/components/part-explorer';
@@ -256,8 +255,7 @@ export default function Dashboard() {
   return (
     <div className="app-shell">
       <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
-        <button className="brand" onClick={() => setTab('overview')}>
-          <BrandMark size={40} />
+        <button className="brand" onClick={() => setTab('overview')} aria-label="Перейти к обзору">
           <span><strong>ПИК</strong><small>АНАЛИТИКА АВИТО</small></span>
         </button>
         <nav aria-label="Разделы">
