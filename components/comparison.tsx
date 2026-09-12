@@ -187,7 +187,7 @@ function MetricChart({
             )}
           />
           {removable && (
-            <Button variant="ghost" onClick={onRemove} aria-label="Убрать график">
+            <Button className="chart-remove-button" variant="ghost" onClick={onRemove} aria-label="Убрать график">
               <X />
             </Button>
           )}

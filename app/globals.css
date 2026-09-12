@@ -252,7 +252,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .period-hint { font-size: 12px; }
 
 .notice, .demo-banner {
-  max-width: calc(1640px - 64px);
+  width: calc(100% - 56px);
+  max-width: calc(1640px - 56px);
   min-height: 46px;
   margin: 18px auto 0;
   display: flex;
@@ -379,7 +380,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .comparison-charts { display: grid; gap: 20px; }
 .comparison-charts .panel { overflow: hidden; }
 .chart-foot, .chart-actions { display: flex; align-items: center; gap: 8px; }
-.chart-actions button { width: 38px; height: 38px; padding: 0 !important; color: #808089 !important; }
+.chart-actions .chart-remove-button { width: 38px; height: 38px; padding: 0 !important; color: #808089 !important; }
 .chart-summary { min-height: 54px; display: flex; align-items: center; flex-wrap: wrap; gap: 20px; padding: 8px 20px; border-top: 1px solid #222228; }
 .chart-summary span { display: flex; align-items: center; gap: 7px; color: #85858e; font-size: 12px; }
 .chart-summary i { width: 7px; height: 7px; border-radius: 50%; }
@@ -475,7 +476,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .topbar { top: 64px; height: 76px; padding: 0 20px; }
   .controlbar { padding: 9px 20px; }
   .content { padding: 16px 20px 50px; }
-  .notice, .demo-banner { max-width: calc(100% - 40px); }
+  .notice, .demo-banner { width: calc(100% - 40px); max-width: none; }
   .listing-links { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
 }
 
@@ -499,7 +500,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .controlbar { justify-content: flex-start; overflow-x: auto; padding: 8px 16px; }
   .history-label, .custom-period { display: none !important; }
   .content { padding: 14px 14px 44px; }
-  .notice, .demo-banner { max-width: calc(100% - 28px); }
+  .notice, .demo-banner { width: calc(100% - 28px); }
   .week-intro { align-items: flex-start; flex-direction: column; }
   .week-intro > div:first-child { align-items: flex-start; flex-direction: column; gap: 2px; }
   .week-intro h2 { font-size: 23px; }
