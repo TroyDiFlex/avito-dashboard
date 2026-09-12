@@ -197,7 +197,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   padding: 10px 32px;
   border-bottom: 1px solid #1d1d22;
 }
-.content { max-width: 1640px; margin: 0 auto; padding: 28px 32px 64px; }
+.content { max-width: 1640px; margin: 0 auto; padding: 16px 32px 48px; }
 
 .period-picker { display: flex; align-items: center; gap: 10px; }
 .history-label { color: #73737c; font-size: 12px; font-weight: 600; }
@@ -254,14 +254,18 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .week-intro {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 22px;
+  min-height: 40px;
+  margin-bottom: 10px;
 }
-.week-intro h2 { font-size: 36px; font-weight: 600; letter-spacing: -.055em; }
+.week-intro > div:first-child { display: flex; align-items: baseline; gap: 12px; }
+.week-intro .overline { margin: 0; }
+.week-intro h2 { font-size: 25px; font-weight: 600; letter-spacing: -.045em; }
 .week-intro p, .section-heading p, .focus-heading p, .comparison-controls p, .catalog-header p, .part-heading p { color: #85858e; font-size: 14px; }
-.week-summary { display: flex; gap: 28px; }
+.week-intro p { font-size: 12px; }
+.week-summary { display: flex; gap: 20px; }
 .week-summary span { display: grid; color: #6f6f78; font-size: 11px; text-align: right; }
 .week-summary strong { color: #d8d8dc; font-size: 16px; font-weight: 600; }
 .section-heading, .focus-heading, .comparison-controls, .catalog-header, .part-heading {
@@ -277,25 +281,52 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   letter-spacing: -.025em;
 }
 .matrix-period { color: #898992; font-size: 12px; }
+.overview-table-panel { overflow: hidden; }
+.overview-table-heading { min-height: 54px; padding: 7px 14px; }
+.overview-table-heading > div:first-child { min-width: 0; }
+.overview-table-heading p { margin-top: 3px; font-size: 11px; }
+.overview-mode-tabs { display: flex; align-items: center; gap: 3px; }
+.overview-mode-tabs > button {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: #777780;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
+.overview-mode-tabs > button:hover { color: #d8d8dc; background: #17171c; }
+.overview-mode-tabs > button.active { color: #fff; background: #27232f; }
+.mode-branch { display: inline-flex; align-items: center; gap: 6px; color: #d8d8dc; }
+.mode-branch::before { width: 1px; height: 14px; margin-right: 1px; content: ''; background: #4b4753; }
+.mode-branch i, .overview-branch-tabs i { width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.overview-branch-tabs { flex: none; }
+.overview-branch-tabs button { height: 28px; display: flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 11px; }
+.overview-branch-tabs button svg { width: 12px; height: 12px; }
 .matrix-scroll, .history-scroll, .table-scroll { overflow-x: auto; }
 .metrics-matrix, .history-table, .parts-table table { width: 100%; border-collapse: collapse; }
 .metrics-matrix { min-width: 1030px; table-layout: fixed; }
-.metrics-matrix thead th { height: 58px; color: #aaaab2; background: #131316; font-size: 13px; font-weight: 600; }
-.metrics-matrix thead th:first-child { width: 218px; padding-left: 20px; text-align: left; }
-.metrics-matrix thead button { width: 100%; height: 58px; display: flex; align-items: center; justify-content: center; gap: 8px; background: transparent; border: 0; }
+.metrics-matrix thead th { height: 38px; color: #aaaab2; background: #131316; font-size: 11px; font-weight: 600; }
+.metrics-matrix thead th:first-child { width: 218px; padding-left: 14px; text-align: left; }
+.metrics-matrix thead button { width: 100%; height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px; background: transparent; border: 0; }
 .metrics-matrix thead button i, .branch-title i, .branch-filter i, .account-list i, .listing-links header i {
   width: 8px; height: 8px; flex: none; border-radius: 50%;
 }
 .metrics-matrix thead button svg { width: 13px; color: #5f5f67; }
 .metrics-matrix th.selected, .metrics-matrix td.selected { background: rgba(139, 92, 246, .055); }
 .matrix-group th, .history-group th {
-  height: 31px !important;
-  padding: 0 20px !important;
+  height: 19px !important;
+  padding: 0 14px !important;
   color: #65656e !important;
   background: #0c0c0e !important;
   border-top: 1px solid #222228;
   border-bottom: 1px solid #1b1b20;
-  font-size: 10px !important;
+  font-size: 8px !important;
   font-weight: 700 !important;
   letter-spacing: .13em;
   text-align: left !important;
@@ -303,13 +334,13 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 .metrics-matrix tbody tr:not(.matrix-group), .history-table tbody tr:not(.history-group) { border-bottom: 1px solid #1d1d22; }
 .metrics-matrix tbody tr:not(.matrix-group):hover, .history-table tbody tr:not(.history-group):hover { background: #151519; }
-.metrics-matrix tbody th { height: 57px; padding: 0 20px; text-align: left; }
-.metrics-matrix tbody th button, .history-table tbody th button { color: #b5b5bd; background: transparent; border: 0; font-size: 13px; text-align: left; }
+.metrics-matrix tbody th { height: 25px; padding: 0 14px; text-align: left; }
+.metrics-matrix tbody th button, .history-table tbody th button { color: #b5b5bd; background: transparent; border: 0; font-size: 10px; text-align: left; }
 .metrics-matrix tbody th button:hover, .history-table tbody th button:hover { color: #fff; }
-.metrics-matrix td { padding: 8px 12px; text-align: right; vertical-align: middle; }
-.metrics-matrix td strong { display: block; color: #f1f1f3; font-size: 14px; font-weight: 600; white-space: nowrap; }
-.matrix-delta { display: inline-flex; align-items: center; gap: 2px; margin-top: 2px; font-size: 10px; white-space: nowrap; }
-.matrix-delta svg { width: 11px; height: 11px; }
+.metrics-matrix td { height: 25px; padding: 2px 9px; text-align: right; vertical-align: middle; white-space: nowrap; }
+.metrics-matrix td strong { color: #f1f1f3; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.matrix-delta { display: inline-flex; align-items: center; gap: 1px; margin-left: 6px; font-size: 8px; white-space: nowrap; }
+.matrix-delta svg { width: 9px; height: 9px; }
 .matrix-delta.positive { color: #4ade80; }
 .matrix-delta.negative { color: #fb7185; }
 .matrix-delta.neutral { color: #686872; }
@@ -322,9 +353,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .branch-tabs button { height: 32px; padding: 0 11px; color: #7e7e87; background: transparent; border: 0; border-radius: 7px; font-size: 12px; }
 .branch-tabs button.active { color: #fff; background: #25202f; }
 .history-table { min-width: 1080px; table-layout: fixed; }
-.history-table th, .history-table td { height: 48px; padding: 0 14px; border-bottom: 1px solid #1d1d22; font-size: 12px; text-align: right; white-space: nowrap; }
+.history-table th, .history-table td { height: 25px; padding: 0 10px; border-bottom: 1px solid #1d1d22; font-size: 10px; text-align: right; white-space: nowrap; }
 .history-table thead th { color: #74747d; background: #131316; font-weight: 500; }
-.history-table th:first-child { width: 218px; padding-left: 20px; text-align: left; }
+.history-table thead th { height: 38px; }
+.history-table th:first-child { width: 218px; padding-left: 14px; text-align: left; }
 .history-table tbody td:last-child { color: #fff; background: rgba(139, 92, 246, .06); font-weight: 650; }
 .trend-panel { margin-top: 22px; background: #101013; border: 1px solid #222228; border-radius: 15px; overflow: hidden; }
 .chart { width: 100%; height: 330px; margin: 0; padding: 14px 4px 10px 0; }
@@ -409,7 +441,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .workspace { margin-left: 0; }
   .topbar { top: 64px; height: 76px; padding: 0 20px; }
   .controlbar { padding: 9px 20px; }
-  .content { padding: 24px 20px 50px; }
+  .content { padding: 16px 20px 50px; }
   .notice, .demo-banner { max-width: calc(100% - 40px); }
   .listing-links { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
 }
@@ -425,13 +457,18 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .refresh-button { padding: 0 13px !important; }
   .controlbar { justify-content: flex-start; overflow-x: auto; padding: 8px 16px; }
   .history-label, .custom-period { display: none !important; }
-  .content { padding: 20px 14px 44px; }
+  .content { padding: 14px 14px 44px; }
   .notice, .demo-banner { max-width: calc(100% - 28px); }
   .week-intro { align-items: flex-start; flex-direction: column; }
+  .week-intro > div:first-child { align-items: flex-start; flex-direction: column; gap: 2px; }
   .week-intro h2 { font-size: 31px; }
   .week-summary { width: 100%; justify-content: space-between; }
   .week-summary span { text-align: left; }
   .section-heading, .focus-heading, .comparison-controls, .catalog-header, .part-heading { align-items: flex-start; flex-direction: column; }
+  .overview-table-heading { gap: 8px; }
+  .overview-mode-tabs { width: 100%; overflow-x: auto; }
+  .overview-mode-tabs > button { flex: none; }
+  .overview-branch-tabs { width: 100%; }
   .focus-heading { padding: 16px; }
   .branch-tabs { width: 100%; overflow-x: auto; }
   .chart { height: 280px; }

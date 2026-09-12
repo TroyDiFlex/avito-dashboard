@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, ChevronRight, Minus } from 'lucide-react';
+import { ArrowDownRight, ArrowLeft, ArrowUpRight, ChevronRight, Minus } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
 import {
   BRANCH_COLORS,
@@ -38,6 +38,15 @@ const GROUPS: { title: string; metrics: Metric[] }[] = [
   },
 ];
 const ALL_METRICS = GROUPS.flatMap((group) => group.metrics);
+type TableMode = 'results' | 'history';
+
+export function tableModeAfterBranchClick(
+  mode: TableMode,
+  currentBranch: string,
+  clickedBranch: string,
+): TableMode {
+  return mode === 'history' && currentBranch === clickedBranch ? 'results' : 'history';
+}
 
 function delta(
   current: number | null | undefined,
@@ -96,6 +105,7 @@ export default function Overview({
   onBranchChange: (branch: string) => void;
 }) {
   const [metric, setMetric] = useState<Metric>('contacts');
+  const [tableMode, setTableMode] = useState<TableMode>('results');
   const histories = useMemo(
     () =>
       Object.fromEntries(
@@ -124,6 +134,16 @@ export default function Overview({
     label: METRICS[value].label,
   }));
 
+  function openBranch(name: string) {
+    const nextMode = tableModeAfterBranchClick(tableMode, branch, name);
+    if (nextMode === 'results') {
+      setTableMode('results');
+      return;
+    }
+    onBranchChange(name);
+    setTableMode(nextMode);
+  }
+
   if (!latest) return <div className="loading-state">За выбранный период нет данных.</div>;
 
   return (
@@ -141,92 +161,115 @@ export default function Overview({
         </div>
       </section>
 
-      <section className="matrix-panel">
-        <div className="section-heading">
+      <section className="matrix-panel overview-table-panel">
+        <div className="section-heading overview-table-heading">
           <div>
-            <h2>Результаты подразделений</h2>
-            <p>Нажмите на подразделение, чтобы открыть его историю ниже.</p>
-          </div>
-          <span className="matrix-period">{shortDate(previous)} → {shortDate(latest)}</span>
-        </div>
-        <div className="matrix-scroll">
-          <table className="metrics-matrix">
-            <thead>
-              <tr>
-                <th>Показатель</th>
-                {BRANCHES.map((name) => (
-                  <th key={name} className={branch === name ? 'selected' : ''}>
-                    <button onClick={() => onBranchChange(name)}>
-                      <i style={{ background: BRANCH_COLORS[name] }} />
-                      {name}<ChevronRight />
-                    </button>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {GROUPS.map((group) => (
-                <GroupRows
-                  key={group.title}
-                  title={group.title}
-                  metrics={group.metrics}
-                  histories={histories}
-                  latest={latest}
-                  previous={previous}
-                  selectedBranch={branch}
-                  onMetricChange={setMetric}
-                  selectedMetric={metric}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="focus-panel">
-        <div className="focus-heading">
-          <div>
-            <span className="branch-title">
-              <i style={{ background: BRANCH_COLORS[branch] }} />{branch}
-            </span>
-            <h2>История подразделения</h2>
-            <p>Последние восемь недель выбранного периода.</p>
-          </div>
-          <div className="branch-tabs">
-            {BRANCHES.map((name) => (
+            <div className="overview-mode-tabs" role="tablist" aria-label="Режим таблицы">
               <button
-                key={name}
-                className={name === branch ? 'active' : ''}
-                onClick={() => onBranchChange(name)}
+                role="tab"
+                aria-selected={tableMode === 'results'}
+                className={tableMode === 'results' ? 'active' : ''}
+                onClick={() => setTableMode('results')}
               >
-                {name}
+                Результаты подразделений
               </button>
-            ))}
+              <button
+                role="tab"
+                aria-selected={tableMode === 'history'}
+                className={tableMode === 'history' ? 'active' : ''}
+                onClick={() => setTableMode('history')}
+              >
+                История подразделения
+                {tableMode === 'history' && (
+                  <span className="mode-branch">
+                    <i style={{ background: BRANCH_COLORS[branch] }} />{branch}
+                  </span>
+                )}
+              </button>
+            </div>
+            <p>
+              {tableMode === 'results'
+                ? 'Нажмите на подразделение — его история откроется в этой же таблице.'
+                : 'Нажмите на активное подразделение ещё раз, чтобы вернуться к общим результатам.'}
+            </p>
           </div>
-        </div>
-        <div className="history-scroll">
-          <table className="history-table">
-            <thead>
-              <tr>
-                <th>Показатель</th>
-                {historyDates.map((date) => <th key={date}>{shortDate(date)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {GROUPS.map((group) => (
-                <HistoryRows
-                  key={group.title}
-                  title={group.title}
-                  metrics={group.metrics}
-                  dates={historyDates}
-                  rows={focusRows}
-                  selectedMetric={metric}
-                  onMetricChange={setMetric}
-                />
+          {tableMode === 'results' ? (
+            <span className="matrix-period">{shortDate(previous)} → {shortDate(latest)}</span>
+          ) : (
+            <div className="branch-tabs overview-branch-tabs" aria-label="Подразделение">
+              {BRANCHES.map((name) => (
+                <button
+                  key={name}
+                  className={name === branch ? 'active' : ''}
+                  onClick={() => openBranch(name)}
+                  title={name === branch
+                    ? 'Вернуться к результатам подразделений'
+                    : `Открыть историю ${name}`}
+                >
+                  {name === branch ? <ArrowLeft /> : <i style={{ background: BRANCH_COLORS[name] }} />}
+                  {name}
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
+        {tableMode === 'results' ? (
+          <div className="matrix-scroll">
+            <table className="metrics-matrix">
+              <thead>
+                <tr>
+                  <th>Показатель</th>
+                  {BRANCHES.map((name) => (
+                    <th key={name}>
+                      <button onClick={() => openBranch(name)}>
+                        <i style={{ background: BRANCH_COLORS[name] }} />
+                        {name}<ChevronRight />
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {GROUPS.map((group) => (
+                  <GroupRows
+                    key={group.title}
+                    title={group.title}
+                    metrics={group.metrics}
+                    histories={histories}
+                    latest={latest}
+                    previous={previous}
+                    onMetricChange={setMetric}
+                    selectedMetric={metric}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="history-scroll">
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>Показатель</th>
+                  {historyDates.map((date) => <th key={date}>{shortDate(date)}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {GROUPS.map((group) => (
+                  <HistoryRows
+                    key={group.title}
+                    title={group.title}
+                    metrics={group.metrics}
+                    dates={historyDates}
+                    rows={focusRows}
+                    selectedMetric={metric}
+                    onMetricChange={setMetric}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="trend-panel">
@@ -260,7 +303,6 @@ function GroupRows({
   histories,
   latest,
   previous,
-  selectedBranch,
   selectedMetric,
   onMetricChange,
 }: {
@@ -269,7 +311,6 @@ function GroupRows({
   histories: Record<string, StatRow[]>;
   latest: string;
   previous: string;
-  selectedBranch: string;
   selectedMetric: Metric;
   onMetricChange: (metric: Metric) => void;
 }) {
@@ -283,7 +324,7 @@ function GroupRows({
             const current = rowAt(histories[name], latest)?.metrics[metric];
             const before = rowAt(histories[name], previous)?.metrics[metric];
             return (
-              <td key={name} className={selectedBranch === name ? 'selected' : ''}>
+              <td key={name}>
                 <strong>{format(current, metric)}</strong>
                 <MetricDelta current={current} previous={before} metric={metric} />
               </td>
