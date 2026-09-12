@@ -5,6 +5,8 @@ import {
   BarChart3,
   Check,
   LineChart,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Search,
   Settings2,
@@ -60,6 +62,14 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [settingNotice, setSettingNotice] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem('pik-sidebar-collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   function applySnapshot(value: Snapshot, initial = false) {
     if (
@@ -144,6 +154,14 @@ export default function Dashboard() {
       /* Device preferences are optional. */
     }
   }, [branch, from, to, tab]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pik-sidebar-collapsed', String(sidebarCollapsed));
+    } catch {
+      /* Device preferences are optional. */
+    }
+  }, [sidebarCollapsed]);
 
   const bounds = useMemo(() => {
     const dates = snapshot?.stats.map((row) => row.end).sort() ?? [];
@@ -237,36 +255,47 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
         <button className="brand" onClick={() => setTab('overview')}>
           <BrandMark size={40} />
           <span><strong>ПИК</strong><small>АНАЛИТИКА АВИТО</small></span>
         </button>
         <nav aria-label="Разделы">
           <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>
-            <BarChart3 />Обзор недели
+            <BarChart3 /><span>Обзор недели</span>
           </button>
           <button className={tab === 'dynamics' ? 'active' : ''} onClick={() => setTab('dynamics')}>
-            <LineChart />Динамика
+            <LineChart /><span>Динамика</span>
           </button>
           <button className={tab === 'ads' ? 'active' : ''} onClick={() => setTab('ads')}>
-            <Search />Объявления
+            <Search /><span>Объявления</span>
           </button>
         </nav>
         <div className="sidebar-footer">
           <button onClick={() => setShowIssues(true)}>
-            <TriangleAlert />Проверка данных
+            <TriangleAlert /><span>Проверка данных</span>
             {relevantIssues.length > 0 && <b>{relevantIssues.length}</b>}
           </button>
-          <button onClick={() => setShowSettings(true)}><Settings2 />Подключение</button>
+          <button onClick={() => setShowSettings(true)}><Settings2 /><span>Подключение</span></button>
           <span className="connection-state">
             <i className={configured ? 'online' : ''} />
-            {configured
-              ? 'Таблицы подключены'
-              : snapshot?.mode === 'demo'
-                ? 'Демонстрационные данные'
-                : 'Нет подключения'}
+            <span>
+              {configured
+                ? 'Таблицы подключены'
+                : snapshot?.mode === 'demo'
+                  ? 'Демонстрационные данные'
+                  : 'Нет подключения'}
+            </span>
           </span>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-label={sidebarCollapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'}
+            title={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+            <span>{sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}</span>
+          </button>
         </div>
       </aside>
 

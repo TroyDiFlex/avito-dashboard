@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowLeft, ArrowUpRight, ChevronRight, Minus } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, ChevronRight, Minus } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
 import {
   BRANCH_COLORS,
@@ -206,7 +206,7 @@ export default function Overview({
                     ? 'Вернуться к результатам подразделений'
                     : `Открыть историю ${name}`}
                 >
-                  {name === branch ? <ArrowLeft /> : <i style={{ background: BRANCH_COLORS[name] }} />}
+                  <i style={{ background: BRANCH_COLORS[name] }} />
                   {name}
                 </button>
               ))}

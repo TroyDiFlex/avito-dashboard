@@ -8,7 +8,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { dateRangeLabel, shortDate, shiftDate, validRange } from '@/lib/model';
+import { dateRangeLabel, shortDate, validRange } from '@/lib/model';
+
+function shiftMonths(iso: string, months: number) {
+  const [year, month, day] = iso.split('-').map(Number);
+  const targetIndex = year * 12 + month - 1 - months;
+  const targetYear = Math.floor(targetIndex / 12);
+  const targetMonth = targetIndex - targetYear * 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return `${targetYear.toString().padStart(4, '0')}-${(targetMonth + 1)
+    .toString()
+    .padStart(2, '0')}-${Math.min(day, lastDay).toString().padStart(2, '0')}`;
+}
 
 export default function PeriodPicker({
   from,
@@ -33,16 +44,16 @@ export default function PeriodPicker({
     <div className="period-picker">
       <span className="history-label">История</span>
       <div className="period-presets" aria-label="Глубина истории графиков">
-        {[4, 12, 26].map((weeks) => {
-          const start = [min, shiftDate(max, -(weeks - 1) * 7)].sort().at(-1)!;
+        {[1, 3, 6].map((months) => {
+          const start = [min, shiftMonths(max, months)].sort().at(-1)!;
           return (
             <button
               type="button"
-              key={weeks}
+              key={months}
               aria-pressed={from === start && to === max}
               onClick={() => onApply(start, max)}
             >
-              {weeks} нед.
+              {months} мес.
             </button>
           );
         })}
