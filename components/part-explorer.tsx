@@ -177,7 +177,7 @@ export default function PartExplorer({
     <div className="ads-page">
       <section className="catalog-header">
         <div>
-          <span className="overline">КАТАЛОГ ОБЪЯВЛЕНИЙ</span>
+          <span className="eyebrow">КАТАЛОГ ОБЪЯВЛЕНИЙ</span>
           <h2>Запчасти и результаты</h2>
           <p>Один артикул — одна строка, независимо от количества аккаунтов.</p>
         </div>
@@ -270,7 +270,7 @@ function PartDetail({
       <button className="back-button" onClick={onBack}><ArrowLeft />Все запчасти</button>
       <section className="part-heading">
         <div>
-          <span className="overline">{part.article ? `АРТИКУЛ ${part.article}` : 'ОБЪЯВЛЕНИЕ'}</span>
+          <span className="eyebrow">{part.article ? `АРТИКУЛ ${part.article}` : 'ОБЪЯВЛЕНИЕ'}</span>
           <h2>{part.name}</h2>
           <p>{part.category}</p>
         </div>
@@ -292,7 +292,7 @@ function PartDetail({
 
       <section className="part-chart panel">
         <div className="section-heading">
-          <div><span className="overline">ВСЕ ПОДРАЗДЕЛЕНИЯ</span><h2>{METRICS[metric].label}</h2></div>
+          <div><span className="eyebrow">ВСЕ ПОДРАЗДЕЛЕНИЯ</span><h2>{METRICS[metric].label}</h2></div>
           <Picker
             label="Показатель графика"
             value={metric}

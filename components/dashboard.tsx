@@ -46,6 +46,87 @@ const TITLES: Record<Tab, string> = {
 };
 const ACTIVE_BRANCHES = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
 
+function Sidebar({
+  tab,
+  onTabChange,
+  onShowIssues,
+  onShowSettings,
+  issueCount,
+  configured,
+  snapshotMode,
+}: {
+  tab: Tab;
+  onTabChange: (tab: Tab) => void;
+  onShowIssues: () => void;
+  onShowSettings: () => void;
+  issueCount: number;
+  configured: boolean;
+  snapshotMode?: Snapshot['mode'];
+}) {
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem('pik-sidebar-collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('pik-sidebar-collapsed', String(collapsed));
+    } catch {
+      /* Device preferences are optional. */
+    }
+  }, [collapsed]);
+
+  return (
+    <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
+      <button className="brand" onClick={() => onTabChange('overview')} aria-label="Перейти к обзору">
+        <span><strong>ПИК</strong><small>АНАЛИТИКА АВИТО</small></span>
+      </button>
+      <nav aria-label="Разделы">
+        <button className={tab === 'overview' ? 'active' : ''} onClick={() => onTabChange('overview')}>
+          <BarChart3 /><span>Обзор недели</span>
+        </button>
+        <button className={tab === 'dynamics' ? 'active' : ''} onClick={() => onTabChange('dynamics')}>
+          <LineChart /><span>Динамика</span>
+        </button>
+        <button className={tab === 'ads' ? 'active' : ''} onClick={() => onTabChange('ads')}>
+          <Search /><span>Объявления</span>
+        </button>
+      </nav>
+      <div className="sidebar-footer">
+        <button onClick={onShowIssues}>
+          <TriangleAlert /><span>Проверка данных</span>
+          {issueCount > 0 && <b>{issueCount}</b>}
+        </button>
+        <button onClick={onShowSettings}><Settings2 /><span>Подключение</span></button>
+        <span className="connection-state">
+          <i className={configured ? 'online' : ''} />
+          <span>
+            {configured
+              ? 'Таблицы подключены'
+              : snapshotMode === 'demo'
+                ? 'Демонстрационные данные'
+                : 'Нет подключения'}
+          </span>
+        </span>
+        <button
+          className="sidebar-toggle"
+          onClick={() => setCollapsed((value) => !value)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'}
+          title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+        >
+          {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+          <span>{collapsed ? 'Развернуть меню' : 'Свернуть меню'}</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
 export default function Dashboard() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -61,14 +142,6 @@ export default function Dashboard() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [settingNotice, setSettingNotice] = useState('');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return localStorage.getItem('pik-sidebar-collapsed') === 'true';
-    } catch {
-      return false;
-    }
-  });
 
   function applySnapshot(value: Snapshot, initial = false) {
     if (
@@ -153,14 +226,6 @@ export default function Dashboard() {
       /* Device preferences are optional. */
     }
   }, [branch, from, to, tab]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('pik-sidebar-collapsed', String(sidebarCollapsed));
-    } catch {
-      /* Device preferences are optional. */
-    }
-  }, [sidebarCollapsed]);
 
   const bounds = useMemo(() => {
     const dates = snapshot?.stats.map((row) => row.end).sort() ?? [];
@@ -254,48 +319,15 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar${sidebarCollapsed ? ' collapsed' : ''}`}>
-        <button className="brand" onClick={() => setTab('overview')} aria-label="Перейти к обзору">
-          <span><strong>ПИК</strong><small>АНАЛИТИКА АВИТО</small></span>
-        </button>
-        <nav aria-label="Разделы">
-          <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>
-            <BarChart3 /><span>Обзор недели</span>
-          </button>
-          <button className={tab === 'dynamics' ? 'active' : ''} onClick={() => setTab('dynamics')}>
-            <LineChart /><span>Динамика</span>
-          </button>
-          <button className={tab === 'ads' ? 'active' : ''} onClick={() => setTab('ads')}>
-            <Search /><span>Объявления</span>
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <button onClick={() => setShowIssues(true)}>
-            <TriangleAlert /><span>Проверка данных</span>
-            {relevantIssues.length > 0 && <b>{relevantIssues.length}</b>}
-          </button>
-          <button onClick={() => setShowSettings(true)}><Settings2 /><span>Подключение</span></button>
-          <span className="connection-state">
-            <i className={configured ? 'online' : ''} />
-            <span>
-              {configured
-                ? 'Таблицы подключены'
-                : snapshot?.mode === 'demo'
-                  ? 'Демонстрационные данные'
-                  : 'Нет подключения'}
-            </span>
-          </span>
-          <button
-            className="sidebar-toggle"
-            onClick={() => setSidebarCollapsed((value) => !value)}
-            aria-label={sidebarCollapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'}
-            title={sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-            <span>{sidebarCollapsed ? 'Развернуть меню' : 'Свернуть меню'}</span>
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        tab={tab}
+        onTabChange={setTab}
+        onShowIssues={() => setShowIssues(true)}
+        onShowSettings={() => setShowSettings(true)}
+        issueCount={relevantIssues.length}
+        configured={configured}
+        snapshotMode={snapshot?.mode}
+      />
 
       <main className="workspace">
         <header className="topbar">

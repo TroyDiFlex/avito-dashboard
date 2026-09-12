@@ -52,7 +52,7 @@ export default function Comparison({
     <div className="comparison-page">
       <section className="comparison-controls">
         <div>
-          <span className="overline">ЕДИНАЯ ШКАЛА И ЦВЕТА</span>
+          <span className="eyebrow">ЕДИНАЯ ШКАЛА И ЦВЕТА</span>
           <h2>Динамика подразделений</h2>
           <p>Каждый график сравнивает один показатель по выбранным подразделениям.</p>
         </div>
@@ -169,7 +169,7 @@ function MetricChart({
     <section className="comparison-chart panel">
       <div className="section-heading">
         <div>
-          <span className="overline">СРАВНЕНИЕ ПО НЕДЕЛЯМ</span>
+          <span className="eyebrow">СРАВНЕНИЕ ПО НЕДЕЛЯМ</span>
           <h2>{METRICS[metric].label}</h2>
         </div>
         <div className="chart-actions">

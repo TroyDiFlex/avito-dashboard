@@ -137,7 +137,7 @@ export default function Overview({
     <div className="overview-page">
       <section className="week-intro">
         <div>
-          <span className="overline">ПОСЛЕДНЯЯ ЗАГРУЖЕННАЯ НЕДЕЛЯ</span>
+          <span className="eyebrow">ПОСЛЕДНЯЯ ЗАГРУЖЕННАЯ НЕДЕЛЯ</span>
           <h2>{shortDate(latest)}</h2>
           <p>Под значением показано изменение к неделе {shortDate(previous)}.</p>
         </div>
