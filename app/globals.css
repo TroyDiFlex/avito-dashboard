@@ -363,7 +363,7 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .overview-branch-tabs button { height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 9px; font-size: 12px; }
 .matrix-scroll, .history-scroll, .table-scroll { overflow-x: auto; }
 .metrics-matrix, .history-table, .parts-table table { width: 100%; border-collapse: collapse; }
-.metrics-matrix { min-width: 1280px; table-layout: fixed; }
+.metrics-matrix { min-width: 1260px; table-layout: fixed; font-variant-numeric: tabular-nums; }
 .metrics-matrix thead th { height: 40px; color: #aaaab2; background: #131316; font-size: 12px; font-weight: 600; }
 .metrics-matrix .matrix-branch-row th:first-child { width: 218px; padding-left: 14px; text-align: left; }
 .matrix-branch-row th { height: 34px !important; }
@@ -395,9 +395,13 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .metrics-matrix tbody th { height: 29px; padding: 0 14px; text-align: left; }
 .metrics-matrix tbody th button, .history-table tbody th button { color: #b5b5bd; background: transparent; border: 0; font-size: 11px; text-align: left; }
 .metrics-matrix tbody th button:hover, .history-table tbody th button:hover { color: #fff; }
-.metrics-matrix td { height: 29px; padding: 2px 10px; text-align: right; vertical-align: middle; white-space: nowrap; }
+.metrics-matrix td { height: 29px; padding: 2px 8px; text-align: right; vertical-align: middle; white-space: nowrap; }
+.metrics-matrix td.current-week { padding-right: 4px; padding-left: 4px; }
 .metrics-matrix td strong { color: #f1f1f3; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .metrics-matrix td.previous-week strong { color: #8a8a93; font-weight: 500; }
+.matrix-current-value { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 56px; align-items: center; gap: 3px; }
+.matrix-current-value > strong { text-align: right; }
+.matrix-current-value > .matrix-delta { margin-left: 0; text-align: left; }
 .matrix-delta { display: inline-flex; align-items: center; gap: 1px; margin-left: 6px; font-size: 9px; white-space: nowrap; }
 .matrix-delta svg { width: 9px; height: 9px; }
 .matrix-delta.positive { color: #4ade80; }

@@ -37,6 +37,8 @@ const GROUPS: { title: string; metrics: Metric[] }[] = [
   },
 ];
 const ALL_METRICS = GROUPS.flatMap((group) => group.metrics);
+const METRIC_COLUMN_WIDTH = 218;
+const BRANCH_COLUMN_PAIR_MIN_WIDTH = 208;
 type TableMode = 'results' | 'history';
 
 function delta(
@@ -140,6 +142,8 @@ export default function Overview({
     value,
     label: METRICS[value].label,
   }));
+  const weekColumnWidth = (share: number) =>
+    `calc(${(share * 100) / branches.length}% - ${(METRIC_COLUMN_WIDTH * share) / branches.length}px)`;
 
   function openBranch(name: string) {
     onBranchChange(name);
@@ -212,7 +216,24 @@ export default function Overview({
         </div>
         {tableMode === 'results' ? (
           <div className="matrix-scroll">
-            <table className="metrics-matrix">
+            <table
+              className="metrics-matrix"
+              style={{
+                minWidth: Math.max(
+                  1260,
+                  METRIC_COLUMN_WIDTH + branches.length * BRANCH_COLUMN_PAIR_MIN_WIDTH,
+                ),
+              }}
+            >
+              <colgroup>
+                <col style={{ width: METRIC_COLUMN_WIDTH }} />
+                {branches.map((name) => (
+                  <Fragment key={name}>
+                    <col style={{ width: weekColumnWidth(0.4) }} />
+                    <col style={{ width: weekColumnWidth(0.6) }} />
+                  </Fragment>
+                ))}
+              </colgroup>
               <thead>
                 <tr className="matrix-branch-row">
                   <th rowSpan={2}>Показатель</th>
@@ -358,8 +379,10 @@ function GroupRows({
               <Fragment key={name}>
                 <td className="previous-week"><strong>{format(before, metric)}</strong></td>
                 <td className="current-week">
-                  <strong>{format(current, metric)}</strong>
-                  <MetricDelta current={current} previous={before} metric={metric} />
+                  <span className="matrix-current-value">
+                    <strong>{format(current, metric)}</strong>
+                    <MetricDelta current={current} previous={before} metric={metric} />
+                  </span>
                 </td>
               </Fragment>
             );
