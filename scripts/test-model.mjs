@@ -128,6 +128,7 @@ const issues = [
   { severity: 'error', code: 'a', source: '', branch: 'Автово', end: '2026-08-31', message: '' },
   { severity: 'error', code: 'k', source: '', branch: 'К20', end: '2026-08-31', message: '' },
   { severity: 'error', code: 'global', source: '', message: '' },
+  { severity: 'warning', code: 'year-inferred', source: '', branch: 'Автово', message: '' },
 ];
 assert.deepEqual(
   filterIssues(issues, ['Автово'], '2026-08-01', '2026-08-31').map((issue) => issue.code),
