@@ -318,11 +318,21 @@ export function format(
   const key = `${unit}:${compact}`;
   let formatter = numberFormats.get(key);
   if (!formatter) {
-    formatter = new Intl.NumberFormat('ru-RU', {
-      maximumFractionDigits: unit === 'count' ? 0 : 1,
-      minimumFractionDigits: unit === 'decimal' ? 1 : 0,
-      notation: compact ? 'compact' : 'standard',
-    });
+    formatter = new Intl.NumberFormat(
+      'ru-RU',
+      compact
+        ? {
+            notation: 'compact',
+            // Keep enough precision to distinguish neighboring axis ticks.
+            // Otherwise, for example, 1200 is mislabeled as "1 тыс.".
+            maximumSignificantDigits: 3,
+          }
+        : {
+            maximumFractionDigits: unit === 'count' ? 0 : 1,
+            minimumFractionDigits: unit === 'decimal' ? 1 : 0,
+            notation: 'standard',
+          },
+    );
     numberFormats.set(key, formatter);
   }
   const text = formatter.format(v);
@@ -367,21 +377,73 @@ export function shiftDate(iso: string, days: number): string {
   const result = new Date(time).toISOString().slice(0, 10);
   return validDate(result) ? result : '';
 }
+export type PeriodPreset = '1m' | '3m' | '6m' | 'all' | 'custom';
+const PERIOD_PRESETS: PeriodPreset[] = ['1m', '3m', '6m', 'all', 'custom'];
+export function shiftMonths(iso: string, months: number): string {
+  if (!validDate(iso) || !Number.isInteger(months)) return '';
+  const [year, month, day] = iso.split('-').map(Number);
+  const targetIndex = year * 12 + month - 1 - months;
+  const targetYear = Math.floor(targetIndex / 12);
+  const targetMonth = targetIndex - targetYear * 12;
+  const lastDay = new Date(
+    Date.UTC(targetYear, targetMonth + 1, 0),
+  ).getUTCDate();
+  const result = `${targetYear.toString().padStart(4, '0')}-${(targetMonth + 1)
+    .toString()
+    .padStart(2, '0')}-${Math.min(day, lastDay).toString().padStart(2, '0')}`;
+  return validDate(result) ? result : '';
+}
+export function presetPeriod(
+  preset: Exclude<PeriodPreset, 'custom'>,
+  min: string,
+  max: string,
+) {
+  const months = preset === '1m' ? 1 : preset === '3m' ? 3 : 6;
+  return {
+    from:
+      preset === 'all'
+        ? min
+        : [min, shiftMonths(max, months)].sort().at(-1)!,
+    to: max,
+  };
+}
 export function restorePeriod(saved: unknown, min: string, max: string) {
   const value =
     saved && typeof saved === 'object'
-      ? (saved as { from?: unknown; to?: unknown })
+      ? (saved as { from?: unknown; to?: unknown; period?: unknown })
       : {};
-  const valid =
+  const validDates =
     validRange(value.from, value.to) &&
     (value.from as string) >= min &&
     (value.to as string) <= max;
+  const savedPreset = PERIOD_PRESETS.includes(value.period as PeriodPreset)
+    ? (value.period as PeriodPreset)
+    : null;
+  if (savedPreset && savedPreset !== 'custom') {
+    return {
+      ...presetPeriod(savedPreset, min, max),
+      period: savedPreset,
+      reset: false,
+    };
+  }
+  if (validDates) {
+    const from = value.from as string;
+    const to = value.to as string;
+    const inferred = (['1m', '3m', '6m', 'all'] as const).find((preset) => {
+      const range = presetPeriod(preset, min, max);
+      return range.from === from && range.to === to;
+    });
+    return {
+      from,
+      to,
+      period: savedPreset ?? inferred ?? 'custom',
+      reset: false,
+    };
+  }
   return {
-    from: valid
-      ? (value.from as string)
-      : [min, shiftDate(max, -77)].sort().at(-1)!,
-    to: valid ? (value.to as string) : max,
-    reset: !valid && !!(value.from || value.to),
+    ...presetPeriod('6m', min, max),
+    period: '6m' as const,
+    reset: !!(value.from || value.to || value.period),
   };
 }
 export function dateRangeLabel(from: string, to: string): string {

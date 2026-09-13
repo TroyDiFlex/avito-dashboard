@@ -8,31 +8,28 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { dateRangeLabel, shortDate, validRange } from '@/lib/model';
-
-function shiftMonths(iso: string, months: number) {
-  const [year, month, day] = iso.split('-').map(Number);
-  const targetIndex = year * 12 + month - 1 - months;
-  const targetYear = Math.floor(targetIndex / 12);
-  const targetMonth = targetIndex - targetYear * 12;
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  return `${targetYear.toString().padStart(4, '0')}-${(targetMonth + 1)
-    .toString()
-    .padStart(2, '0')}-${Math.min(day, lastDay).toString().padStart(2, '0')}`;
-}
+import {
+  dateRangeLabel,
+  presetPeriod,
+  shortDate,
+  validRange,
+  type PeriodPreset,
+} from '@/lib/model';
 
 export default function PeriodPicker({
   from,
   to,
   min,
   max,
+  period,
   onApply,
 }: {
   from: string;
   to: string;
   min: string;
   max: string;
-  onApply: (from: string, to: string) => void;
+  period: PeriodPreset;
+  onApply: (from: string, to: string, period: PeriodPreset) => void;
 }) {
   const [draftFrom, setDraftFrom] = useState(from),
     [draftTo, setDraftTo] = useState(to);
@@ -45,13 +42,14 @@ export default function PeriodPicker({
       <span className="history-label">История</span>
       <div className="period-presets" aria-label="Глубина истории графиков">
         {[1, 3, 6].map((months) => {
-          const start = [min, shiftMonths(max, months)].sort().at(-1)!;
+          const preset = `${months}m` as '1m' | '3m' | '6m';
+          const range = presetPeriod(preset, min, max);
           return (
             <button
               type="button"
               key={months}
-              aria-pressed={from === start && to === max}
-              onClick={() => onApply(start, max)}
+              aria-pressed={period === preset}
+              onClick={() => onApply(range.from, range.to, preset)}
             >
               {months} мес.
             </button>
@@ -59,8 +57,8 @@ export default function PeriodPicker({
         })}
         <button
           type="button"
-          aria-pressed={from === min && to === max}
-          onClick={() => onApply(min, max)}
+          aria-pressed={period === 'all'}
+          onClick={() => onApply(min, max, 'all')}
         >
           Всё время
         </button>
@@ -93,7 +91,7 @@ export default function PeriodPicker({
             onSubmit={(event) => {
               event.preventDefault();
               if (valid) {
-                onApply(draftFrom, draftTo);
+                onApply(draftFrom, draftTo, 'custom');
                 setOpen(false);
               }
             }}

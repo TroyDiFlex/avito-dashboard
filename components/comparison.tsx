@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,33 @@ const metricChoices = (Object.keys(METRICS) as Metric[]).map((value) => ({
   label: METRICS[value].label,
 }));
 
+function storedComparison(availableBranches: string[]) {
+  const fallback = {
+    metrics: DEFAULT_METRICS,
+    branches: availableBranches,
+    indexed: false,
+  };
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const saved = JSON.parse(localStorage.getItem('pik-comparison') ?? 'null');
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return fallback;
+    const metrics = Array.isArray(saved.metrics)
+      ? [...new Set(saved.metrics.filter((value: unknown) =>
+          typeof value === 'string' && Object.hasOwn(METRICS, value),
+        ))].slice(0, 4) as Metric[]
+      : [];
+    const branches = Array.isArray(saved.branches)
+      ? availableBranches.filter((branch) => saved.branches.includes(branch))
+      : [];
+    return {
+      metrics: metrics.length ? metrics : DEFAULT_METRICS,
+      branches: branches.length ? branches : availableBranches,
+      indexed: saved.indexed === true,
+    };
+  } catch {
+    return fallback;
+  }
+}
 export default function Comparison({
   snapshot,
   from,
@@ -30,13 +57,25 @@ export default function Comparison({
   to: string;
   availableBranches: string[];
 }) {
-  const [metrics, setMetrics] = useState<Metric[]>(DEFAULT_METRICS);
-  const [selectedBranches, setSelectedBranches] = useState(availableBranches);
-  const [indexed, setIndexed] = useState(false);
+  const [initial] = useState(() => storedComparison(availableBranches));
+  const [metrics, setMetrics] = useState<Metric[]>(initial.metrics);
+  const [selectedBranches, setSelectedBranches] = useState(initial.branches);
+  const [indexed, setIndexed] = useState(initial.indexed);
   const visibleSelection = selectedBranches.filter((branch) =>
     availableBranches.includes(branch),
   );
   const branches = visibleSelection.length ? visibleSelection : [availableBranches[0]];
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'pik-comparison',
+        JSON.stringify({ metrics, branches: selectedBranches, indexed }),
+      );
+    } catch {
+      /* Device preferences are optional. */
+    }
+  }, [metrics, selectedBranches, indexed]);
 
   function toggleBranch(branch: string) {
     setSelectedBranches((current) =>

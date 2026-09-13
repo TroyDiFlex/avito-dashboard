@@ -43,6 +43,7 @@ import {
   restorePeriod,
   validDate,
   validRange,
+  type PeriodPreset,
   type Snapshot,
 } from '@/lib/model';
 import { normalize, type RawPayload } from '@/lib/normalize';
@@ -138,11 +139,13 @@ function Sidebar({
           className="sidebar-toggle"
           onClick={() => setCollapsed((value) => !value)}
           aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'}
-          title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          aria-label={
+            collapsed ? 'Закрепить боковое меню раскрытым' : 'Свернуть боковое меню'
+          }
+          title={collapsed ? 'Закрепить раскрытым' : 'Свернуть меню'}
         >
           {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-          <span>{collapsed ? 'Развернуть меню' : 'Свернуть меню'}</span>
+          <span>{collapsed ? 'Закрепить раскрытым' : 'Свернуть меню'}</span>
         </button>
       </div>
     </aside>
@@ -156,6 +159,7 @@ export default function Dashboard() {
   const [branch, setBranch] = useState('И31');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [period, setPeriod] = useState<PeriodPreset>('6m');
   const [showSettings, setShowSettings] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [scriptUrl, setScriptUrl] = useState('');
@@ -184,7 +188,13 @@ export default function Dashboard() {
     const dates = value.stats.map((row) => row.end).sort();
     const min = dates[0];
     const max = dates.at(-1)!;
-    let saved: { branch?: string; from?: string; to?: string; tab?: string } = {};
+    let saved: {
+      branch?: string;
+      from?: string;
+      to?: string;
+      tab?: string;
+      period?: string;
+    } = {};
     try {
       const parsed = JSON.parse(localStorage.getItem('pik-filters') ?? '{}');
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed;
@@ -194,6 +204,7 @@ export default function Dashboard() {
     const restored = restorePeriod(saved, min, max);
     setFrom(restored.from);
     setTo(restored.to);
+    setPeriod(restored.period);
     if (saved.branch && visibleBranches.includes(saved.branch)) setBranch(saved.branch);
     if (saved.tab === 'overview' || saved.tab === 'dynamics' || saved.tab === 'ads') {
       setTab(saved.tab);
@@ -246,11 +257,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (!validRange(from, to)) return;
     try {
-      localStorage.setItem('pik-filters', JSON.stringify({ branch, from, to, tab }));
+      localStorage.setItem(
+        'pik-filters',
+        JSON.stringify({ branch, from, to, tab, period }),
+      );
     } catch {
       /* Device preferences are optional. */
     }
-  }, [branch, from, to, tab]);
+  }, [branch, from, to, tab, period]);
 
   useEffect(() => {
     try {
@@ -405,10 +419,12 @@ export default function Dashboard() {
               to={to}
               min={bounds.min}
               max={bounds.max}
-              onApply={(start, end) => {
+              period={period}
+              onApply={(start, end, nextPeriod) => {
                 if (validRange(start, end) && start >= bounds.min && end <= bounds.max) {
                   setFrom(start);
                   setTo(end);
+                  setPeriod(nextPeriod);
                   setNotice('');
                 }
               }}

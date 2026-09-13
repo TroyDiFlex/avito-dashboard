@@ -212,6 +212,13 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   transform: translateX(-6px);
 }
 .sidebar.collapsed .sidebar-footer b { position: absolute; top: -3px; left: 30px; min-width: 17px; height: 17px; margin: 0; font-size: 9px; }
+.sidebar.collapsed:hover { clip-path: inset(0); }
+.sidebar.collapsed:hover .brand { opacity: 1; pointer-events: auto; }
+.sidebar.collapsed:hover .brand > span,
+.sidebar.collapsed:hover nav button > span,
+.sidebar.collapsed:hover .sidebar-footer button > span,
+.sidebar.collapsed:hover .connection-state > span { opacity: 1; transform: translateX(0); }
+.sidebar.collapsed:hover .sidebar-footer b { position: static; min-width: 20px; height: 20px; margin-left: auto; font-size: 11px; }
 
 .workspace { min-height: 100vh; margin-left: 72px; }
 .topbar {

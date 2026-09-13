@@ -18,7 +18,9 @@ for (const name of ['model', 'normalize', 'explore', 'issues']) {
 const {
   aggregate,
   calendar,
+  format,
   number,
+  presetPeriod,
   validDate,
   validRange,
   shiftDate,
@@ -37,6 +39,9 @@ const {
 assert.equal(number('15 499 ₽'), 15499);
 assert.equal(number('н/д'), null);
 assert.equal(number('0'), 0);
+assert.equal(format(1200, 'views', true), '1,2\u00a0тыс.');
+assert.equal(format(1250, 'views', true), '1,25\u00a0тыс.');
+assert.equal(format(1200000, 'views', true), '1,2\u00a0млн');
 assert.equal(
   aggregate(
     [
@@ -215,7 +220,8 @@ for (const [from, to] of [
   }
   const restored = restorePeriod({ from, to }, '2025-01-06', '2026-09-07');
   assert.equal(restored.to, '2026-09-07');
-  assert.equal(restored.from, '2026-06-22');
+  assert.equal(restored.from, '2026-03-07');
+  assert.equal(restored.period, '6m');
   assert.equal(restored.reset, true);
 }
 assert.ok(
@@ -230,6 +236,7 @@ assert.equal(shiftDate('bad', -7), '');
 assert.deepEqual(restorePeriod(null, '2026-08-03', '2026-09-07'), {
   from: '2026-08-03',
   to: '2026-09-07',
+  period: '6m',
   reset: false,
 });
 assert.deepEqual(
@@ -238,8 +245,20 @@ assert.deepEqual(
     '2026-08-03',
     '2026-09-07',
   ),
-  { from: '2026-08-03', to: '2026-08-31', reset: false },
+  { from: '2026-08-03', to: '2026-08-31', period: 'custom', reset: false },
 );
+assert.deepEqual(
+  restorePeriod(
+    { from: '2026-03-07', to: '2026-09-07', period: '6m' },
+    '2025-01-06',
+    '2026-09-14',
+  ),
+  { from: '2026-03-14', to: '2026-09-14', period: '6m', reset: false },
+);
+assert.deepEqual(presetPeriod('6m', '2025-01-06', '2026-09-07'), {
+  from: '2026-03-07',
+  to: '2026-09-07',
+});
 assert.deepEqual(
   calendar('2026-08-01', '2026-08-31', [
     '2026-08-03',
