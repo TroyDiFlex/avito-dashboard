@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, ChevronRight, Minus } from 'lucide-react';
+import { Fragment, useMemo, useRef, useState } from 'react';
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
 import {
   BRANCH_COLORS,
@@ -99,6 +99,7 @@ export default function Overview({
 }) {
   const [metric, setMetric] = useState<Metric>('contacts');
   const [tableMode, setTableMode] = useState<TableMode>('results');
+  const trendRef = useRef<HTMLElement>(null);
   const histories = useMemo(
     () =>
       Object.fromEntries(
@@ -121,7 +122,20 @@ export default function Overview({
     .filter((date) => date >= from && date <= to)
     .sort()
     .slice(-8);
-  const points = timeSeries(focusRows, metric, 'week', from, to);
+  const chartBranches = tableMode === 'results' ? branches : [branch];
+  const chartData = useMemo(() => {
+    const rowsByDate = new Map<string, Record<string, unknown>>();
+    for (const name of tableMode === 'results' ? branches : [branch]) {
+      for (const point of timeSeries(histories[name] ?? [], metric, 'week', from, to)) {
+        const row = rowsByDate.get(point.date) ?? { date: point.date };
+        row[name] = point.value;
+        rowsByDate.set(point.date, row);
+      }
+    }
+    return [...rowsByDate.values()].sort((a, b) =>
+      String(a.date).localeCompare(String(b.date)),
+    );
+  }, [branch, branches, from, histories, metric, tableMode, to]);
   const metricChoices = ALL_METRICS.map((value) => ({
     value,
     label: METRICS[value].label,
@@ -130,6 +144,18 @@ export default function Overview({
   function openBranch(name: string) {
     onBranchChange(name);
     setTableMode('history');
+  }
+
+  function selectMetricAndReveal(nextMetric: Metric) {
+    setMetric(nextMetric);
+    window.requestAnimationFrame(() => {
+      trendRef.current?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+        block: 'start',
+      });
+    });
   }
 
   if (!latest) return <div className="loading-state">За выбранный период нет данных.</div>;
@@ -188,16 +214,26 @@ export default function Overview({
           <div className="matrix-scroll">
             <table className="metrics-matrix">
               <thead>
-                <tr>
-                  <th>Показатель</th>
+                <tr className="matrix-branch-row">
+                  <th rowSpan={2}>Показатель</th>
                   {branches.map((name) => (
-                    <th key={name}>
-                      <button onClick={() => openBranch(name)}>
+                    <th key={name} colSpan={2}>
+                      <span className="matrix-branch-title">
                         <i style={{ background: BRANCH_COLORS[name] }} />
-                        {name}<ChevronRight />
-                      </button>
+                        {name}
+                      </span>
                     </th>
                   ))}
+                </tr>
+                <tr className="matrix-week-row">
+                  {branches.flatMap((name) => [
+                    <th key={`${name}:${previous}`} className="previous-week">
+                      {shortDate(previous)}
+                    </th>,
+                    <th key={`${name}:${latest}`} className="current-week">
+                      {shortDate(latest)}
+                    </th>,
+                  ])}
                 </tr>
               </thead>
               <tbody>
@@ -209,7 +245,7 @@ export default function Overview({
                     histories={histories}
                     latest={latest}
                     previous={previous}
-                    onMetricChange={setMetric}
+                    onMetricChange={selectMetricAndReveal}
                     selectedMetric={metric}
                     branches={branches}
                   />
@@ -235,7 +271,7 @@ export default function Overview({
                     dates={historyDates}
                     rows={focusRows}
                     selectedMetric={metric}
-                    onMetricChange={setMetric}
+                    onMetricChange={selectMetricAndReveal}
                   />
                 ))}
               </tbody>
@@ -244,11 +280,24 @@ export default function Overview({
         )}
       </section>
 
-      <section className="trend-panel">
+      <section className="trend-panel" ref={trendRef}>
         <div className="section-heading">
           <div>
             <span className="branch-title">
-              <i style={{ background: BRANCH_COLORS[branch] }} />{branch}
+              {tableMode === 'results' ? (
+                <>
+                  <span className="branch-dot-stack" aria-hidden="true">
+                    {branches.map((name) => (
+                      <i key={name} style={{ background: BRANCH_COLORS[name] }} />
+                    ))}
+                  </span>
+                  Все подразделения
+                </>
+              ) : (
+                <>
+                  <i style={{ background: BRANCH_COLORS[branch] }} />{branch}
+                </>
+              )}
             </span>
             <h2>{METRICS[metric].label}</h2>
           </div>
@@ -260,8 +309,12 @@ export default function Overview({
           />
         </div>
         <Chart
-          data={points}
-          series={[{ key: 'value', label: branch, color: BRANCH_COLORS[branch] }]}
+          data={chartData}
+          series={chartBranches.map((name) => ({
+            key: name,
+            label: name,
+            color: BRANCH_COLORS[name],
+          }))}
           metric={metric}
         />
       </section>
@@ -290,18 +343,25 @@ function GroupRows({
 }) {
   return (
     <>
-      <tr className="matrix-group"><th colSpan={branches.length + 1}>{title}</th></tr>
+      <tr className="matrix-group"><th colSpan={branches.length * 2 + 1}>{title}</th></tr>
       {metrics.map((metric) => (
-        <tr key={metric} className={selectedMetric === metric ? 'metric-selected' : ''}>
-          <th><button onClick={() => onMetricChange(metric)}>{METRICS[metric].label}</button></th>
+        <tr
+          key={metric}
+          className={selectedMetric === metric ? 'metric-selected' : ''}
+          onClick={() => onMetricChange(metric)}
+        >
+          <th><button type="button">{METRICS[metric].label}</button></th>
           {branches.map((name) => {
             const current = rowAt(histories[name], latest)?.metrics[metric];
             const before = rowAt(histories[name], previous)?.metrics[metric];
             return (
-              <td key={name}>
-                <strong>{format(current, metric)}</strong>
-                <MetricDelta current={current} previous={before} metric={metric} />
-              </td>
+              <Fragment key={name}>
+                <td className="previous-week"><strong>{format(before, metric)}</strong></td>
+                <td className="current-week">
+                  <strong>{format(current, metric)}</strong>
+                  <MetricDelta current={current} previous={before} metric={metric} />
+                </td>
+              </Fragment>
             );
           })}
         </tr>
@@ -329,8 +389,12 @@ function HistoryRows({
     <>
       <tr className="history-group"><th colSpan={dates.length + 1}>{title}</th></tr>
       {metrics.map((metric) => (
-        <tr key={metric} className={selectedMetric === metric ? 'metric-selected' : ''}>
-          <th><button onClick={() => onMetricChange(metric)}>{METRICS[metric].label}</button></th>
+        <tr
+          key={metric}
+          className={selectedMetric === metric ? 'metric-selected' : ''}
+          onClick={() => onMetricChange(metric)}
+        >
+          <th><button type="button">{METRICS[metric].label}</button></th>
           {dates.map((date) => (
             <td key={date}>{format(rowAt(rows, date)?.metrics[metric], metric)}</td>
           ))}

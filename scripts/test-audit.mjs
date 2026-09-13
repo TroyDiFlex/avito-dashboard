@@ -83,6 +83,7 @@ const html = renderToStaticMarkup(
     to: '2026-08-31',
     branch: 'И31',
     onBranchChange() {},
+    branches,
   }),
 );
 assert.equal((html.match(/class="matrix-group"/g) || []).length, 4);
@@ -90,6 +91,7 @@ assert.equal((html.match(/class="history-group"/g) || []).length, 0);
 assert.ok(html.includes('overview-table-panel'));
 assert.ok(html.includes('Результаты подразделений'));
 assert.ok(html.includes('Все подразделения'));
+assert.equal((html.match(/colSpan="2"/g) || []).length, branches.length);
 assert.ok(!html.includes('История подразделения'));
 assert.ok(!html.includes('focus-panel'));
 for (const branch of branches) assert.ok(html.includes(branch));
