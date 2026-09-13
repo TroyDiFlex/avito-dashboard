@@ -439,34 +439,36 @@ export default function Dashboard() {
 
         {snapshot && (
           <div className="content">
-            {tab === 'overview' && (
-              <Overview
-                snapshot={snapshot}
-                from={from}
-                to={to}
-                branch={branch}
-                onBranchChange={setBranch}
-                branches={visibleBranches}
-              />
-            )}
-            {tab === 'dynamics' && (
-              <Comparison
-                snapshot={snapshot}
-                from={from}
-                to={to}
-                availableBranches={visibleBranches}
-              />
-            )}
-            {tab === 'ads' && (
-              <PartExplorer
-                key={branch}
-                snapshot={snapshot}
-                from={from}
-                to={to}
-                initialScope="network"
-                availableBranches={visibleBranches}
-              />
-            )}
+            <div key={tab} className="view-enter">
+              {tab === 'overview' && (
+                <Overview
+                  snapshot={snapshot}
+                  from={from}
+                  to={to}
+                  branch={branch}
+                  onBranchChange={setBranch}
+                  branches={visibleBranches}
+                />
+              )}
+              {tab === 'dynamics' && (
+                <Comparison
+                  snapshot={snapshot}
+                  from={from}
+                  to={to}
+                  availableBranches={visibleBranches}
+                />
+              )}
+              {tab === 'ads' && (
+                <PartExplorer
+                  key={branch}
+                  snapshot={snapshot}
+                  from={from}
+                  to={to}
+                  initialScope="network"
+                  availableBranches={visibleBranches}
+                />
+              )}
+            </div>
           </div>
         )}
       </main>
