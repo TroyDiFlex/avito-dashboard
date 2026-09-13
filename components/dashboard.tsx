@@ -5,14 +5,16 @@ import {
   BarChart3,
   Check,
   LineChart,
+  Megaphone,
+  PackageSearch,
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
-  Search,
   Settings2,
   TriangleAlert,
   X,
 } from 'lucide-react';
+import AdsExplorer from '@/components/ads-explorer';
 import Comparison from '@/components/comparison';
 import Overview from '@/components/overview';
 import PartExplorer from '@/components/part-explorer';
@@ -48,10 +50,11 @@ import {
 } from '@/lib/model';
 import { normalize, type RawPayload } from '@/lib/normalize';
 
-type Tab = 'overview' | 'dynamics' | 'ads';
+type Tab = 'overview' | 'dynamics' | 'parts' | 'ads';
 const TITLES: Record<Tab, string> = {
   overview: 'Обзор недели',
   dynamics: 'Динамика',
+  parts: 'Запчасти',
   ads: 'Объявления',
 };
 const DEFAULT_VISIBLE_BRANCHES = BRANCHES.filter((branch) => branch !== 'К20');
@@ -115,8 +118,11 @@ function Sidebar({
         <button className={tab === 'dynamics' ? 'active' : ''} onClick={() => onTabChange('dynamics')}>
           <LineChart /><span>Динамика</span>
         </button>
+        <button className={tab === 'parts' ? 'active' : ''} onClick={() => onTabChange('parts')}>
+          <PackageSearch /><span>Запчасти</span>
+        </button>
         <button className={tab === 'ads' ? 'active' : ''} onClick={() => onTabChange('ads')}>
-          <Search /><span>Объявления</span>
+          <Megaphone /><span>Объявления</span>
         </button>
       </nav>
       <div className="sidebar-footer">
@@ -169,8 +175,10 @@ export default function Dashboard() {
   const [notice, setNotice] = useState('');
   const [settingNotice, setSettingNotice] = useState('');
   const [visibleBranches, setVisibleBranches] = useState(storedVisibleBranches);
+  const [partTarget, setPartTarget] = useState<{ branch: string; id: string } | null>(null);
 
   function changeTab(nextTab: Tab) {
+    if (nextTab !== 'parts') setPartTarget(null);
     setTab(nextTab);
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
@@ -199,6 +207,7 @@ export default function Dashboard() {
       to?: string;
       tab?: string;
       period?: string;
+      navigationVersion?: number;
     } = {};
     try {
       const parsed = JSON.parse(localStorage.getItem('pik-filters') ?? '{}');
@@ -211,8 +220,10 @@ export default function Dashboard() {
     setTo(restored.to);
     setPeriod(restored.period);
     if (saved.branch && visibleBranches.includes(saved.branch)) setBranch(saved.branch);
-    if (saved.tab === 'overview' || saved.tab === 'dynamics' || saved.tab === 'ads') {
+    if (saved.tab === 'overview' || saved.tab === 'dynamics' || saved.tab === 'parts') {
       setTab(saved.tab);
+    } else if (saved.tab === 'ads') {
+      setTab(saved.navigationVersion === 2 ? 'ads' : 'parts');
     }
     if (restored.reset) {
       setNotice('Сохранённый период был вне доступной истории и восстановлен.');
@@ -264,7 +275,7 @@ export default function Dashboard() {
     try {
       localStorage.setItem(
         'pik-filters',
-        JSON.stringify({ branch, from, to, tab, period }),
+        JSON.stringify({ branch, from, to, tab, period, navigationVersion: 2 }),
       );
     } catch {
       /* Device preferences are optional. */
@@ -481,14 +492,29 @@ export default function Dashboard() {
                   availableBranches={visibleBranches}
                 />
               )}
-              {tab === 'ads' && (
+              {tab === 'parts' && (
                 <PartExplorer
-                  key={branch}
+                  key={partTarget ? `${partTarget.branch}:${partTarget.id}` : branch}
                   snapshot={snapshot}
                   from={from}
                   to={to}
                   initialScope="network"
                   availableBranches={visibleBranches}
+                  initialAd={partTarget}
+                />
+              )}
+              {tab === 'ads' && (
+                <AdsExplorer
+                  snapshot={snapshot}
+                  from={from}
+                  to={to}
+                  initialBranch={branch}
+                  availableBranches={visibleBranches}
+                  onOpenPart={(ad) => {
+                    setPartTarget(ad);
+                    setTab('parts');
+                    window.scrollTo({ top: 0, behavior: 'auto' });
+                  }}
                 />
               )}
             </div>

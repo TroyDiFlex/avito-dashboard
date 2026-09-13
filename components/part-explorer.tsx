@@ -111,12 +111,14 @@ export default function PartExplorer({
   to,
   initialScope,
   availableBranches,
+  initialAd,
 }: {
   snapshot: Snapshot;
   from: string;
   to: string;
   initialScope: string;
   availableBranches: string[];
+  initialAd?: Pick<AdRow, 'branch' | 'id'> | null;
 }) {
   const allParts = useMemo(() => buildParts(snapshot), [snapshot]);
   const scopes = useMemo(
@@ -133,7 +135,16 @@ export default function PartExplorer({
   );
   const [metric, setMetric] = useState<Metric>('contacts');
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() =>
+    initialAd
+      ? allParts.find((part) =>
+          part.listings.some(
+            (listing) =>
+              listing.latest.branch === initialAd.branch && listing.latest.id === initialAd.id,
+          ),
+        )?.key ?? null
+      : null,
+  );
   const effectiveScope =
     scope === 'network' || availableBranches.includes(scope) ? scope : 'network';
   const branches = useMemo(
