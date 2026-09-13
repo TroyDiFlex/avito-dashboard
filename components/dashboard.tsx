@@ -586,7 +586,7 @@ export default function Dashboard() {
         <DialogContent className="issues-dialog">
           <DialogHeader>
             <DialogTitle>Проверка данных</DialogTitle>
-            <DialogDescription>Замечания источника для {branch} и выбранного периода.</DialogDescription>
+            <DialogDescription>Замечания источника для всех подразделений за выбранный период.</DialogDescription>
           </DialogHeader>
           <div className="issues-list">
             {relevantIssues.length ? (
