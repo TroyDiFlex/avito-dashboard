@@ -105,10 +105,17 @@ export default function Comparison({
               setMetrics((current) => current.filter((value) => value !== metric))
             }
             onChange={(value) => {
-              if (metrics.includes(value as Metric)) return;
-              setMetrics((current) =>
-                current.map((item) => (item === metric ? (value as Metric) : item)),
-              );
+              const nextMetric = value as Metric;
+              setMetrics((current) => {
+                const currentIndex = current.indexOf(metric);
+                const nextIndex = current.indexOf(nextMetric);
+                if (currentIndex < 0 || currentIndex === nextIndex) return current;
+
+                const next = [...current];
+                next[currentIndex] = nextMetric;
+                if (nextIndex >= 0) next[nextIndex] = metric;
+                return next;
+              });
             }}
           />
         ))}
