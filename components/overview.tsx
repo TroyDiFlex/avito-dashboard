@@ -1,8 +1,10 @@
 'use client';
 
-import { Fragment, useMemo, useRef, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowDownRight, ArrowUpRight, Minus, RefreshCw } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
+import { Button } from '@/components/ui/button';
 import {
   BRANCH_COLORS,
   METRICS,
@@ -40,6 +42,51 @@ const ALL_METRICS = GROUPS.flatMap((group) => group.metrics);
 const METRIC_COLUMN_WIDTH = 218;
 const BRANCH_COLUMN_PAIR_MIN_WIDTH = 208;
 type TableMode = 'results' | 'history';
+
+function branchColumnWidth(branchCount: number, share: number) {
+  return `calc(${(share * 100) / branchCount}% - ${(METRIC_COLUMN_WIDTH * share) / branchCount}px)`;
+}
+
+function ResultsTableHeader({ branches, previous, latest }: {
+  branches: string[];
+  previous: string;
+  latest: string;
+}) {
+  return (
+    <>
+      <colgroup>
+        <col style={{ width: METRIC_COLUMN_WIDTH }} />
+        {branches.map((name) => (
+          <Fragment key={name}>
+            <col style={{ width: branchColumnWidth(branches.length, 0.36) }} />
+            <col style={{ width: branchColumnWidth(branches.length, 0.3) }} />
+            <col style={{ width: branchColumnWidth(branches.length, 0.34) }} />
+          </Fragment>
+        ))}
+      </colgroup>
+      <thead>
+        <tr className="matrix-branch-row">
+          <th rowSpan={2}>Показатель</th>
+          {branches.map((name) => (
+            <th key={name} colSpan={3}>
+              <span className="matrix-branch-title">
+                <i style={{ background: BRANCH_COLORS[name] }} />
+                {name}
+              </span>
+            </th>
+          ))}
+        </tr>
+        <tr className="matrix-week-row">
+          {branches.flatMap((name) => [
+            <th key={`${name}:${previous}`} className="previous-week">{shortDate(previous)}</th>,
+            <th key={`${name}:${latest}`} className="current-week">{shortDate(latest)}</th>,
+            <th key={`${name}:delta`} className="delta-week" aria-label="Изменение">Δ</th>,
+          ])}
+        </tr>
+      </thead>
+    </>
+  );
+}
 
 function delta(
   current: number | null | undefined,
@@ -91,6 +138,8 @@ export default function Overview({
   branch,
   onBranchChange,
   branches,
+  onRefresh,
+  refreshing,
 }: {
   snapshot: Snapshot;
   from: string;
@@ -98,10 +147,16 @@ export default function Overview({
   branch: string;
   onBranchChange: (branch: string) => void;
   branches: string[];
+  onRefresh: () => void | Promise<void>;
+  refreshing: boolean;
 }) {
   const [metric, setMetric] = useState<Metric>('contacts');
   const [tableMode, setTableMode] = useState<TableMode>('results');
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
   const trendRef = useRef<HTMLElement>(null);
+  const resultsTableRef = useRef<HTMLTableElement>(null);
+  const matrixScrollRef = useRef<HTMLDivElement>(null);
+  const stickyTableRef = useRef<HTMLTableElement>(null);
   const histories = useMemo(
     () =>
       Object.fromEntries(
@@ -142,11 +197,53 @@ export default function Overview({
     value,
     label: METRICS[value].label,
   }));
-  const branchColumnWidth = (share: number) =>
-    `calc(${(share * 100) / branches.length}% - ${(METRIC_COLUMN_WIDTH * share) / branches.length}px)`;
+  const resultsTableMinWidth = Math.max(
+    1260,
+    METRIC_COLUMN_WIDTH + branches.length * BRANCH_COLUMN_PAIR_MIN_WIDTH,
+  );
+
+  useEffect(() => {
+    if (tableMode !== 'results') return;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const table = resultsTableRef.current;
+        const tableHead = table?.tHead;
+        const topbar = document.querySelector<HTMLElement>('.topbar');
+        if (!table || !tableHead) return;
+        const topbarBottom = topbar?.getBoundingClientRect().bottom ?? 80;
+        const tableRect = table.getBoundingClientRect();
+        const next = tableHead.getBoundingClientRect().top <= topbarBottom && tableRect.bottom > topbarBottom;
+        setShowStickyHeader((current) => current === next ? current : next);
+        if (stickyTableRef.current) {
+          stickyTableRef.current.style.transform = `translateX(-${matrixScrollRef.current?.scrollLeft ?? 0}px)`;
+        }
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [tableMode]);
+
+  useEffect(() => {
+    if (!showStickyHeader || !stickyTableRef.current) return;
+    stickyTableRef.current.style.transform = `translateX(-${matrixScrollRef.current?.scrollLeft ?? 0}px)`;
+  }, [showStickyHeader]);
+
+  function syncStickyHeader() {
+    if (!stickyTableRef.current) return;
+    stickyTableRef.current.style.transform = `translateX(-${matrixScrollRef.current?.scrollLeft ?? 0}px)`;
+  }
 
   function openBranch(name: string) {
     onBranchChange(name);
+    setShowStickyHeader(false);
     setTableMode('history');
   }
 
@@ -166,6 +263,34 @@ export default function Overview({
 
   return (
     <div className="overview-page">
+      {showStickyHeader && tableMode === 'results' && createPortal(
+        <header className="overview-sticky-header">
+          <div className="overview-sticky-inner">
+            <div className="overview-sticky-meta">
+              <strong>Результаты подразделений</strong>
+              <Button
+                className="sticky-refresh-button"
+                disabled={refreshing}
+                onClick={() => void onRefresh()}
+                aria-label={refreshing ? 'Обновляем данные' : 'Обновить данные'}
+                title={refreshing ? 'Обновляем данные' : 'Обновить данные'}
+              >
+                <RefreshCw className={refreshing ? 'spin' : ''} />
+              </Button>
+            </div>
+            <div className="sticky-matrix-scroll" aria-hidden="true">
+              <table
+                ref={stickyTableRef}
+                className="metrics-matrix sticky-metrics-matrix"
+                style={{ minWidth: resultsTableMinWidth }}
+              >
+                <ResultsTableHeader branches={branches} previous={previous} latest={latest} />
+              </table>
+            </div>
+          </div>
+        </header>,
+        document.body,
+      )}
       <section className="week-intro">
         <div>
           <span className="eyebrow">ПОСЛЕДНЯЯ ЗАГРУЖЕННАЯ НЕДЕЛЯ</span>
@@ -215,50 +340,13 @@ export default function Overview({
           </div>
         </div>
         {tableMode === 'results' ? (
-          <div className="matrix-scroll">
+          <div className="matrix-scroll" ref={matrixScrollRef} onScroll={syncStickyHeader}>
             <table
+              ref={resultsTableRef}
               className="metrics-matrix"
-              style={{
-                minWidth: Math.max(
-                  1260,
-                  METRIC_COLUMN_WIDTH + branches.length * BRANCH_COLUMN_PAIR_MIN_WIDTH,
-                ),
-              }}
+              style={{ minWidth: resultsTableMinWidth }}
             >
-              <colgroup>
-                <col style={{ width: METRIC_COLUMN_WIDTH }} />
-                {branches.map((name) => (
-                  <Fragment key={name}>
-                    <col style={{ width: branchColumnWidth(0.36) }} />
-                    <col style={{ width: branchColumnWidth(0.3) }} />
-                    <col style={{ width: branchColumnWidth(0.34) }} />
-                  </Fragment>
-                ))}
-              </colgroup>
-              <thead>
-                <tr className="matrix-branch-row">
-                  <th rowSpan={2}>Показатель</th>
-                  {branches.map((name) => (
-                    <th key={name} colSpan={3}>
-                      <span className="matrix-branch-title">
-                        <i style={{ background: BRANCH_COLORS[name] }} />
-                        {name}
-                      </span>
-                    </th>
-                  ))}
-                </tr>
-                <tr className="matrix-week-row">
-                  {branches.flatMap((name) => [
-                    <th key={`${name}:${previous}`} className="previous-week">
-                      {shortDate(previous)}
-                    </th>,
-                    <th key={`${name}:${latest}`} className="current-week">
-                      {shortDate(latest)}
-                    </th>,
-                    <th key={`${name}:delta`} className="delta-week" aria-label="Изменение">Δ</th>,
-                  ])}
-                </tr>
-              </thead>
+              <ResultsTableHeader branches={branches} previous={previous} latest={latest} />
               <tbody>
                 {GROUPS.map((group) => (
                   <GroupRows

@@ -170,6 +170,11 @@ export default function Dashboard() {
   const [settingNotice, setSettingNotice] = useState('');
   const [visibleBranches, setVisibleBranches] = useState(storedVisibleBranches);
 
+  function changeTab(nextTab: Tab) {
+    setTab(nextTab);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
   function applySnapshot(value: Snapshot, initial = false) {
     if (
       value.version !== 1 ||
@@ -381,7 +386,7 @@ export default function Dashboard() {
     <div className="app-shell">
       <Sidebar
         tab={tab}
-        onTabChange={setTab}
+        onTabChange={changeTab}
         onShowIssues={() => setShowIssues(true)}
         onShowSettings={() => setShowSettings(true)}
         issueCount={relevantIssues.length}
@@ -464,6 +469,8 @@ export default function Dashboard() {
                   branch={branch}
                   onBranchChange={setBranch}
                   branches={visibleBranches}
+                  onRefresh={refresh}
+                  refreshing={busy}
                 />
               )}
               {tab === 'dynamics' && (
