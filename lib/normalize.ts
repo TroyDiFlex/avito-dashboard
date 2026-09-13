@@ -303,14 +303,6 @@ export function normalize(
       for (let i = anchor + 1; i < periods.length; i++)
         years[i] =
           years[i - 1] + (periods[i].p!.em < periods[i - 1].p!.em ? 1 : 0);
-      issues.push({
-        severity: 'warning',
-        code: 'year-inferred',
-        source,
-        branch: br,
-        message:
-          'Годы заголовков восстановлены по датам детализации и переходам календарного года; старые периоды требуют подтверждения.',
-      });
       for (let pi = 0; pi < periods.length; pi++) {
         const { ci, label, p } = periods[pi];
         const y = years[pi];
