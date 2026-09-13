@@ -36,6 +36,7 @@ import {
 } from '@/lib/client-store';
 import { demoSnapshot } from '@/lib/demo';
 import { scopeBranches } from '@/lib/explore';
+import { filterIssues } from '@/lib/issues';
 import {
   BRANCHES,
   BRANCH_COLORS,
@@ -276,13 +277,10 @@ export default function Dashboard() {
     const dates = snapshot?.stats.map((row) => row.end).sort() ?? [];
     return { min: dates[0] ?? '', max: dates.at(-1) ?? '' };
   }, [snapshot]);
-  const relevantIssues =
-    snapshot?.issues.filter(
-      (issue) =>
-        (!issue.branch ||
-          (visibleBranches.includes(issue.branch) && scopeBranches(branch).includes(issue.branch))) &&
-        (!issue.end || (issue.end >= from && issue.end <= to)),
-    ) ?? [];
+  const relevantBranches = visibleBranches.filter((name) =>
+    scopeBranches(branch).includes(name),
+  );
+  const relevantIssues = filterIssues(snapshot?.issues ?? [], relevantBranches, from, to);
 
   async function refresh() {
     if (!configured) {
@@ -307,7 +305,9 @@ export default function Dashboard() {
         const raw = (await response.json()) as RawPayload & { error?: string };
         if (raw.error) throw new Error(raw.error);
         const next = normalize(raw, 'google');
-        const errors = next.issues.filter((issue) => issue.severity === 'error');
+        const errors = filterIssues(next.issues, visibleBranches).filter(
+          (issue) => issue.severity === 'error',
+        );
         if (errors.length) {
           throw new Error(`Новая версия не сохранена: ${errors.length} строк требуют проверки.`);
         }
@@ -545,7 +545,11 @@ export default function Dashboard() {
                 <div className="issue" key={`${issue.code}:${index}`}>
                   <TriangleAlert />
                   <div>
-                    <strong>{issue.end ?? 'История'}{issue.row ? ` · строка ${issue.row}` : ''}</strong>
+                    <strong>
+                      {issue.branch ? `${issue.branch} · ` : ''}
+                      {issue.end ?? 'История'}
+                      {issue.row ? ` · строка ${issue.row}` : ''}
+                    </strong>
                     <p>{issue.message}</p>
                     <small>{issue.source}</small>
                   </div>

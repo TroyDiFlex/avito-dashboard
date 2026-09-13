@@ -98,6 +98,8 @@ export function parseAd(
         code: 'identity',
         source,
         row,
+        branch: br ?? undefined,
+        end: end ?? undefined,
         message: 'Не распознаны дата, подразделение или номер объявления.',
       },
     };

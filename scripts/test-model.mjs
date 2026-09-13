@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import ts from 'typescript';
 
 await fs.mkdir('private/compiled', { recursive: true });
-for (const name of ['model', 'normalize', 'explore']) {
+for (const name of ['model', 'normalize', 'explore', 'issues']) {
   const source = await fs.readFile(`lib/${name}.ts`, 'utf8');
   const output = ts
     .transpileModule(source, {
@@ -25,6 +25,7 @@ const {
   restorePeriod,
 } = await import('../private/compiled/model.js');
 const { parseAd } = await import('../private/compiled/normalize.js');
+const { filterIssues } = await import('../private/compiled/issues.js');
 const {
   distribution,
   extractArticle,
@@ -106,6 +107,27 @@ const result = parseAd(bad, true, 'synthetic', 2, 'Детализация');
 assert.equal(result.ad.metrics.contacts, null);
 assert.equal(result.ad.metrics.views, 20);
 assert.equal(result.issue.code, 'contact-inconsistent');
+const invalidIdentity = row(false, false);
+invalidIdentity[2] = 'неверный номер';
+const invalidIdentityResult = parseAd(
+  invalidIdentity,
+  true,
+  'synthetic',
+  2,
+  'Детализация',
+);
+assert.equal(invalidIdentityResult.issue.code, 'identity');
+assert.equal(invalidIdentityResult.issue.branch, 'Автово');
+assert.equal(invalidIdentityResult.issue.end, '2026-08-31');
+const issues = [
+  { severity: 'error', code: 'a', source: '', branch: 'Автово', end: '2026-08-31', message: '' },
+  { severity: 'error', code: 'k', source: '', branch: 'К20', end: '2026-08-31', message: '' },
+  { severity: 'error', code: 'global', source: '', message: '' },
+];
+assert.deepEqual(
+  filterIssues(issues, ['Автово'], '2026-08-01', '2026-08-31').map((issue) => issue.code),
+  ['a', 'global'],
+);
 assert.equal(
   extractArticle('Клапанная крышка N47 11128507607 11128589941').value,
   '11128507607',
