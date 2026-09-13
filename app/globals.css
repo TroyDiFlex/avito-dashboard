@@ -368,10 +368,11 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .metrics-matrix .matrix-branch-row th:first-child { width: 218px; padding-left: 14px; text-align: left; }
 .matrix-branch-row th { height: 34px !important; }
 .matrix-branch-title { height: 34px; display: flex; align-items: center; justify-content: center; gap: 7px; }
-.matrix-week-row th { height: 25px !important; padding: 0 10px; color: #707079; font-size: 9px; font-weight: 500; text-align: right; }
+.matrix-week-row th { height: 25px !important; padding: 0 4px; color: #707079; font-size: 9px; font-weight: 500; text-align: left; }
 .matrix-week-row .current-week { color: #a8a8b0; }
-.matrix-week-row th:nth-child(2n), .metrics-matrix tbody td:nth-of-type(2n) { border-right: 1px solid #26262c; }
-.matrix-branch-row th:not(:first-child), .metrics-matrix tbody td:nth-of-type(odd) { border-left: 1px solid #1d1d22; }
+.matrix-week-row .delta-week { color: #5f5f68; }
+.matrix-week-row th:nth-child(3n), .metrics-matrix tbody td:nth-of-type(3n) { border-right: 1px solid #26262c; }
+.matrix-branch-row th:not(:first-child), .matrix-week-row th:nth-child(3n + 1), .metrics-matrix tbody td:nth-of-type(3n + 1) { border-left: 1px solid #1d1d22; }
 .matrix-branch-title i, .branch-title i, .branch-filter i, .account-list i, .listing-links header i {
   width: 8px; height: 8px; flex: none; border-radius: 50%;
 }
@@ -395,14 +396,12 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .metrics-matrix tbody th { height: 29px; padding: 0 14px; text-align: left; }
 .metrics-matrix tbody th button, .history-table tbody th button { color: #b5b5bd; background: transparent; border: 0; font-size: 11px; text-align: left; }
 .metrics-matrix tbody th button:hover, .history-table tbody th button:hover { color: #fff; }
-.metrics-matrix td { height: 29px; padding: 2px 8px; text-align: right; vertical-align: middle; white-space: nowrap; }
-.metrics-matrix td.current-week { padding-right: 4px; padding-left: 4px; }
+.metrics-matrix td { height: 29px; padding: 2px 4px; text-align: left; vertical-align: middle; white-space: nowrap; }
+.metrics-matrix td.delta-week { padding-right: 2px; padding-left: 0; }
 .metrics-matrix td strong { color: #f1f1f3; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .metrics-matrix td.previous-week strong { color: #8a8a93; font-weight: 500; }
-.matrix-current-value { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 56px; align-items: center; gap: 3px; }
-.matrix-current-value > strong { text-align: right; }
-.matrix-current-value > .matrix-delta { margin-left: 0; text-align: left; }
 .matrix-delta { display: inline-flex; align-items: center; gap: 1px; margin-left: 6px; font-size: 9px; white-space: nowrap; }
+.metrics-matrix td.delta-week .matrix-delta { margin-left: 0; }
 .matrix-delta svg { width: 9px; height: 9px; }
 .matrix-delta.positive { color: #4ade80; }
 .matrix-delta.negative { color: #fb7185; }

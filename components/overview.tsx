@@ -142,7 +142,7 @@ export default function Overview({
     value,
     label: METRICS[value].label,
   }));
-  const weekColumnWidth = (share: number) =>
+  const branchColumnWidth = (share: number) =>
     `calc(${(share * 100) / branches.length}% - ${(METRIC_COLUMN_WIDTH * share) / branches.length}px)`;
 
   function openBranch(name: string) {
@@ -229,8 +229,9 @@ export default function Overview({
                 <col style={{ width: METRIC_COLUMN_WIDTH }} />
                 {branches.map((name) => (
                   <Fragment key={name}>
-                    <col style={{ width: weekColumnWidth(0.4) }} />
-                    <col style={{ width: weekColumnWidth(0.6) }} />
+                    <col style={{ width: branchColumnWidth(0.36) }} />
+                    <col style={{ width: branchColumnWidth(0.3) }} />
+                    <col style={{ width: branchColumnWidth(0.34) }} />
                   </Fragment>
                 ))}
               </colgroup>
@@ -238,7 +239,7 @@ export default function Overview({
                 <tr className="matrix-branch-row">
                   <th rowSpan={2}>Показатель</th>
                   {branches.map((name) => (
-                    <th key={name} colSpan={2}>
+                    <th key={name} colSpan={3}>
                       <span className="matrix-branch-title">
                         <i style={{ background: BRANCH_COLORS[name] }} />
                         {name}
@@ -254,6 +255,7 @@ export default function Overview({
                     <th key={`${name}:${latest}`} className="current-week">
                       {shortDate(latest)}
                     </th>,
+                    <th key={`${name}:delta`} className="delta-week" aria-label="Изменение">Δ</th>,
                   ])}
                 </tr>
               </thead>
@@ -364,7 +366,7 @@ function GroupRows({
 }) {
   return (
     <>
-      <tr className="matrix-group"><th colSpan={branches.length * 2 + 1}>{title}</th></tr>
+      <tr className="matrix-group"><th colSpan={branches.length * 3 + 1}>{title}</th></tr>
       {metrics.map((metric) => (
         <tr
           key={metric}
@@ -378,11 +380,9 @@ function GroupRows({
             return (
               <Fragment key={name}>
                 <td className="previous-week"><strong>{format(before, metric)}</strong></td>
-                <td className="current-week">
-                  <span className="matrix-current-value">
-                    <strong>{format(current, metric)}</strong>
-                    <MetricDelta current={current} previous={before} metric={metric} />
-                  </span>
+                <td className="current-week"><strong>{format(current, metric)}</strong></td>
+                <td className="delta-week">
+                  <MetricDelta current={current} previous={before} metric={metric} />
                 </td>
               </Fragment>
             );
