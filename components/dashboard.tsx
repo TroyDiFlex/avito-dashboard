@@ -84,11 +84,12 @@ function Sidebar({
   snapshotMode?: Snapshot['mode'];
 }) {
   const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') return true;
     try {
-      return localStorage.getItem('pik-sidebar-collapsed') === 'true';
+      const saved = localStorage.getItem('pik-sidebar-collapsed');
+      return saved === null ? true : saved === 'true';
     } catch {
-      return false;
+      return true;
     }
   });
 
