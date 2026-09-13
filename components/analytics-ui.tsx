@@ -198,6 +198,7 @@ export function Chart({
             tickLine={false}
           />
           <Tooltip
+            itemSorter={(item) => -Number(item.value)}
             contentStyle={{
               background: '#202831',
               border: '1px solid #3c4955',
