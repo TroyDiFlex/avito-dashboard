@@ -483,6 +483,7 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .branch-filter button i { transition: opacity var(--motion-fast) ease, transform var(--motion-base) var(--motion-spring); }
 .branch-filter button.active i { transform: scale(1.2); }
 .branch-filter button:not(.active) i { opacity: .25; transform: scale(.8); }
+.comparison-scope button:first-child { font-weight: 600; }
 .comparison-charts { display: grid; gap: 20px; }
 .comparison-charts .panel { overflow: hidden; }
 .comparison-chart { animation: view-in var(--motion-slow) var(--motion-spring) both; }
@@ -492,9 +493,48 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .chart-summary span { display: flex; align-items: center; gap: 7px; color: #85858e; font-size: 12px; }
 .chart-summary i { width: 7px; height: 7px; border-radius: 50%; }
 .chart-summary strong { color: #d8d8dc; font-weight: 600; }
+.chart-summary small { color: #6f6f78; font-size: 10px; }
 .add-chart { min-height: 70px; display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: #0e0e11; border: 1px dashed #2b2b33; border-radius: 14px; }
 .add-chart > svg { width: 18px; color: #ef3340; }
 .add-chart > span { color: #6f6f78; font-size: 12px; }
+
+.metric-workbench { display: grid; grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); align-items: start; gap: 18px; }
+.metric-groups { overflow: hidden; }
+.metric-groups > header { min-height: 67px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 15px; border-bottom: 1px solid #222228; }
+.metric-groups > header > div { display: grid; gap: 3px; }
+.metric-groups > header .eyebrow { margin: 0; }
+.metric-groups > header strong { color: #d8d8dc; font-size: 13px; font-weight: 600; }
+.metric-groups > header > button { color: #777780; background: transparent; border: 0; font-size: 11px; }
+.metric-groups > header > button:hover { color: #fff; }
+.metric-group + .metric-group { border-top: 1px solid #24242a; }
+.metric-group-toggle { width: 100%; min-height: 43px; display: flex; align-items: center; gap: 9px; padding: 7px 14px; color: #9a9aa3; background: #0d0d10; border: 0; text-align: left; }
+.metric-group-toggle:hover, .metric-group-toggle.selected { color: #eeeef0; background: #131316; }
+.metric-group-toggle strong { flex: 1; font-size: 12px; font-weight: 600; }
+.metric-group-toggle small { color: #6f6f78; font-size: 10px; font-variant-numeric: tabular-nums; }
+.metric-check { width: 17px; height: 17px; display: grid; place-items: center; flex: none; color: #fff; background: #09090b; border: 1px solid #34343c; border-radius: 5px; }
+.metric-group-toggle.selected .metric-check { background: #d92734; border-color: #ef3340; }
+.metric-check svg { width: 12px; height: 12px; stroke-width: 2.5; }
+.metric-options { display: grid; padding: 6px 10px 10px 38px; }
+.metric-options label { min-height: 31px; display: flex; align-items: center; gap: 8px; color: #85858e; font-size: 11px; cursor: pointer; }
+.metric-options label:hover { color: #d8d8dc; }
+.metric-options input { width: 14px; height: 14px; accent-color: #ef3340; }
+.metric-overlay-panel { min-width: 0; overflow: hidden; }
+.metric-overlay-heading { min-height: 83px; }
+.metric-overlay-heading > p { max-width: 310px; text-align: right; }
+.metric-chart-legend { display: flex; flex-wrap: wrap; gap: 3px 6px; padding: 12px 16px 2px; }
+.metric-chart-legend button { min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px; color: #777780; background: transparent; border: 1px solid transparent; border-radius: 7px; font-size: 11px; }
+.metric-chart-legend button:hover, .metric-chart-legend button.active { color: #f1f1f3; background: #17171c; border-color: #2c2c33; }
+.metric-chart-legend i { width: 15px; height: 2px; flex: none; border-radius: 2px; }
+.metric-chart-legend small { color: #65656e; font-size: 9px; }
+.multi-metric-chart { height: 520px; padding-top: 6px; }
+.multi-metric-tooltip { min-width: 235px; display: grid; gap: 7px; padding: 11px 12px; color: #f3f5f7; background: #202831; border: 1px solid #3c4955; border-radius: 12px; box-shadow: 0 14px 34px rgba(0, 0, 0, .28); font-size: 11px; }
+.multi-metric-tooltip > strong { margin-bottom: 2px; color: #aeb8c1; font-size: 11px; font-weight: 600; }
+.multi-metric-tooltip span { display: grid; grid-template-columns: 8px minmax(105px, 1fr) auto; align-items: center; gap: 6px; }
+.multi-metric-tooltip i { width: 7px; height: 7px; border-radius: 50%; }
+.multi-metric-tooltip em { overflow: hidden; color: #c8ced4; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.multi-metric-tooltip b { color: #fff; font-weight: 600; white-space: nowrap; }
+.multi-metric-tooltip small { grid-column: 2 / -1; color: #84909a; font-size: 9px; text-align: right; }
+.metric-chart-note { margin: 0; padding: 10px 18px 14px; color: #8d7a5c; border-top: 1px solid #222228; font-size: 11px; }
 
 .catalog-header { padding-top: 4px; }
 .catalog-header > strong { font-size: 25px; font-weight: 500; letter-spacing: -.04em; }
@@ -658,6 +698,8 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   .content { padding: 16px 20px 50px; }
   .notice, .demo-banner { width: calc(100% - 40px); max-width: none; }
   .listing-links { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  .metric-workbench { grid-template-columns: 1fr; }
+  .metric-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (hover: hover) {
@@ -709,7 +751,11 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   .focus-heading { padding: 16px; }
   .branch-tabs { width: 100%; overflow-x: auto; }
   .chart { height: 280px; }
+  .multi-metric-chart { height: 420px; }
   .comparison-actions { width: 100%; }
+  .comparison-actions .mode-button { flex: 1; }
+  .metric-options { grid-template-columns: 1fr; }
+  .metric-overlay-heading > p { max-width: none; text-align: left; }
   .catalog-toolbar { grid-template-columns: 1fr; }
   .catalog-toolbar .picker { width: 100%; }
   .listing-analytics-header { align-items: stretch; }

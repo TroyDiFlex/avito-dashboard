@@ -31,6 +31,7 @@ const { describeIssue, filterIssues, isBlockingIssue } = await import('../privat
 const {
   distribution,
   extractArticle,
+  recentMetricMedian,
   scopeHistory,
   searchUrl,
   timeSeries,
@@ -210,6 +211,44 @@ assert.deepEqual(distribution([1, 2, 10, null]), {
   mean: 13 / 3,
   median: 2,
 });
+const medianRows = [
+  { end: '2026-08-03', metrics: { views: 10 } },
+  { end: '2026-08-10', metrics: { views: null } },
+  { end: '2026-08-17', metrics: {} },
+  { end: '2026-08-24', metrics: { views: 30 } },
+  { end: '2026-08-31', metrics: { views: 50 } },
+];
+assert.deepEqual(recentMetricMedian(medianRows, 'views', '2026-08-31'), {
+  value: 30,
+  count: 3,
+});
+assert.deepEqual(recentMetricMedian(medianRows, 'views', '2026-08-24'), {
+  value: 20,
+  count: 2,
+});
+assert.deepEqual(
+  recentMetricMedian(
+    [
+      { end: '2026-08-03', metrics: { views: 0 } },
+      { end: '2026-08-10', metrics: { views: null } },
+      { end: '2026-08-17', metrics: { views: 10 } },
+    ],
+    'views',
+    '2026-08-17',
+  ),
+  { value: 5, count: 2 },
+);
+assert.deepEqual(
+  recentMetricMedian(
+    Array.from({ length: 14 }, (_, index) => ({
+      end: `2026-01-${String(index + 1).padStart(2, '0')}`,
+      metrics: { views: index + 1 },
+    })),
+    'views',
+    '2026-01-14',
+  ),
+  { value: 8.5, count: 12 },
+);
 console.log(
   'Passed: data layouts, weighted aggregation, city totals, time grains, missing values, article extraction and safe Avito links.',
 );

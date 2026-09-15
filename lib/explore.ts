@@ -148,6 +148,24 @@ export function distribution(values: (number | null | undefined)[]) {
   };
 }
 
+export function recentMetricMedian(
+  rows: { end: string; metrics: Metrics }[],
+  metric: Metric,
+  to: string,
+  limit = 12,
+) {
+  const values = rows
+    .filter((row) => row.end <= to)
+    .sort((a, b) => a.end.localeCompare(b.end))
+    .map((row) => row.metrics[metric])
+    .filter((value): value is number => value != null && Number.isFinite(value))
+    .slice(-Math.max(1, limit));
+  return {
+    value: distribution(values).median,
+    count: values.length,
+  };
+}
+
 export interface Article {
   value: string | null;
   origin: 'title' | 'manual' | 'missing';

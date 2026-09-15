@@ -5,6 +5,7 @@ import {
   LineChart,
   CartesianGrid,
   ResponsiveContainer,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -197,6 +198,19 @@ export function Chart({
             axisLine={false}
             tickLine={false}
           />
+          {indexed && (
+            <ReferenceLine
+              y={100}
+              stroke="#7f8a94"
+              strokeDasharray="5 5"
+              label={{
+                value: 'норма',
+                fill: '#99a5af',
+                fontSize: 11,
+                position: 'insideTopRight',
+              }}
+            />
+          )}
           <Tooltip
             itemSorter={(item) => -Number(item.value)}
             contentStyle={{
