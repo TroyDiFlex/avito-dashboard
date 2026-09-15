@@ -27,7 +27,7 @@ const {
   restorePeriod,
 } = await import('../private/compiled/model.js');
 const { parseAd } = await import('../private/compiled/normalize.js');
-const { filterIssues } = await import('../private/compiled/issues.js');
+const { describeIssue, filterIssues, isBlockingIssue } = await import('../private/compiled/issues.js');
 const {
   distribution,
   extractArticle,
@@ -133,6 +133,18 @@ const issues = [
 assert.deepEqual(
   filterIssues(issues, ['Автово'], '2026-08-01', '2026-08-31').map((issue) => issue.code),
   ['a', 'global'],
+);
+assert.equal(isBlockingIssue({ ...issues[0], code: 'identity' }), false);
+assert.equal(isBlockingIssue({ ...issues[0], code: 'duplicate-stat' }), true);
+assert.equal(isBlockingIssue({ ...issues[0], code: 'unknown-error' }), true);
+assert.equal(
+  describeIssue({
+    ...issues[0],
+    source: 'Книга / Детализация',
+    row: 42,
+    message: 'Неверная дата.',
+  }),
+  'Книга / Детализация · строка 42 · Автово · 2026-08-31: Неверная дата.',
 );
 assert.equal(
   extractArticle('Клапанная крышка N47 11128507607 11128589941').value,

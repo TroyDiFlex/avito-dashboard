@@ -1,6 +1,27 @@
 import type { Issue } from './model';
 
 const HIDDEN_ISSUE_CODES = new Set(['year-inferred']);
+const RECOVERABLE_ROW_ISSUE_CODES = new Set([
+  'identity',
+  'layout',
+  'duplicate',
+]);
+
+export function isBlockingIssue(issue: Issue): boolean {
+  return (
+    issue.severity === 'error' && !RECOVERABLE_ROW_ISSUE_CODES.has(issue.code)
+  );
+}
+
+export function describeIssue(issue: Issue): string {
+  const location = [
+    issue.source,
+    issue.row ? `строка ${issue.row}` : '',
+    issue.branch ?? '',
+    issue.end ?? '',
+  ].filter(Boolean);
+  return `${location.join(' · ')}: ${issue.message}`;
+}
 
 export function issueBelongsToBranches(
   issue: Issue,

@@ -316,6 +316,9 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 }
 .notice button, .demo-banner button { color: #ff7b84; background: transparent; border: 0; font-weight: 600; }
 .notice svg { width: 16px; }
+.notice.progress { color: #cbd5e1; background: #121820; border-color: #283747; }
+.notice.success { color: #bbf7d0; background: #102019; border-color: #23583b; }
+.notice.warning { color: #fde68a; background: #211b0d; border-color: #5c4718; }
 .notice.error { color: #fecaca; background: #211112; border-color: #572326; }
 .demo-banner strong { color: #fff; }
 .loading-state { min-height: 300px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #8c8c95; }

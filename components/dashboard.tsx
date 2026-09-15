@@ -38,7 +38,7 @@ import {
 } from '@/lib/client-store';
 import { demoSnapshot } from '@/lib/demo';
 import { scopeBranches } from '@/lib/explore';
-import { filterIssues } from '@/lib/issues';
+import { describeIssue, filterIssues, isBlockingIssue } from '@/lib/issues';
 import {
   BRANCHES,
   BRANCH_COLORS,
@@ -51,6 +51,7 @@ import {
 import { normalize, type RawPayload } from '@/lib/normalize';
 
 type Tab = 'overview' | 'dynamics' | 'parts' | 'ads';
+type NoticeKind = 'progress' | 'success' | 'warning' | 'error';
 const TITLES: Record<Tab, string> = {
   overview: 'Обзор недели',
   dynamics: 'Динамика',
@@ -173,6 +174,7 @@ export default function Dashboard() {
   const [configured, setConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [noticeKind, setNoticeKind] = useState<NoticeKind>('progress');
   const [settingNotice, setSettingNotice] = useState('');
   const [visibleBranches, setVisibleBranches] = useState(storedVisibleBranches);
   const [partTarget, setPartTarget] = useState<{ branch: string; id: string } | null>(null);
@@ -197,10 +199,16 @@ export default function Dashboard() {
     }
     setSnapshot(value);
     setLoadError('');
-    if (!initial) return;
     const dates = value.stats.map((row) => row.end).sort();
     const min = dates[0];
     const max = dates.at(-1)!;
+    if (!initial) {
+      const nextPeriod = restorePeriod({ from, to, period }, min, max);
+      setFrom(nextPeriod.from);
+      setTo(nextPeriod.to);
+      setPeriod(nextPeriod.period);
+      return;
+    }
     let saved: {
       branch?: string;
       from?: string;
@@ -226,6 +234,7 @@ export default function Dashboard() {
       setTab(saved.navigationVersion === 2 ? 'ads' : 'parts');
     }
     if (restored.reset) {
+      setNoticeKind('warning');
       setNotice('Сохранённый период был вне доступной истории и восстановлен.');
     }
   }
@@ -318,6 +327,7 @@ export default function Dashboard() {
       return;
     }
     setBusy(true);
+    setNoticeKind('progress');
     setNotice('Читаем таблицы и проверяем новую неделю…');
     try {
       if (isStaticApp()) {
@@ -330,29 +340,47 @@ export default function Dashboard() {
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ token: connection.token }),
           redirect: 'follow',
+          cache: 'no-store',
         });
         if (!response.ok) throw new Error('Источник данных не ответил.');
         const raw = (await response.json()) as RawPayload & { error?: string };
         if (raw.error) throw new Error(raw.error);
         const next = normalize(raw, 'google');
-        const errors = filterIssues(next.issues, visibleBranches).filter(
+        const errors = filterIssues(next.issues, BRANCHES).filter(
           (issue) => issue.severity === 'error',
         );
-        if (errors.length) {
-          throw new Error(`Новая версия не сохранена: ${errors.length} строк требуют проверки.`);
+        const blockingErrors = errors.filter(isBlockingIssue);
+        if (blockingErrors.length) {
+          throw new Error(
+            `Новые данные не применены. ${describeIssue(blockingErrors[0])}` +
+              (blockingErrors.length > 1
+                ? ` Ещё ошибок: ${blockingErrors.length - 1}.`
+                : ''),
+          );
         }
         await saveBrowserSnapshot(next);
         applySnapshot(next);
-        setNotice(`Готово. Загружено ${next.ads.length.toLocaleString('ru-RU')} записей.`);
+        if (errors.length) {
+          setNoticeKind('warning');
+          setNotice(
+            `Данные обновлены. Исключено строк: ${errors.length}. ${describeIssue(errors[0])}` +
+              (errors.length > 1 ? ` Ещё ошибок: ${errors.length - 1}.` : ''),
+          );
+        } else {
+          setNoticeKind('success');
+          setNotice(`Готово. Загружено ${next.ads.length.toLocaleString('ru-RU')} записей.`);
+        }
       } else {
         const response = await fetch('/api/refresh', { method: 'POST' });
         const result = (await response.json()) as { error?: string; rows?: number };
         if (!response.ok) throw new Error(result.error ?? 'Не удалось обновить данные.');
         await load();
+        setNoticeKind('success');
         setNotice(`Готово. Загружено ${(result.rows ?? 0).toLocaleString('ru-RU')} записей.`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ошибка обновления.';
+      setNoticeKind('error');
       setNotice(`${message} Предыдущая версия сохранена.`);
     } finally {
       setBusy(false);
@@ -449,7 +477,7 @@ export default function Dashboard() {
         )}
 
         {notice && (
-          <output className="notice">
+          <output className={`notice ${noticeKind}`}>
             {notice}
             <button onClick={() => setNotice('')} aria-label="Закрыть сообщение"><X /></button>
           </output>
