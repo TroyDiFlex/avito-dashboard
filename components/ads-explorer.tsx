@@ -435,11 +435,22 @@ export default function AdsExplorer({
                         {metric === 'spend' && (
                           <small
                             className="contact-price-share"
-                            title="Стоимость контакта как доля цены объявления"
+                            title="Стоимость контакта: расходы ÷ контакты. Доля цены: стоимость контакта ÷ цена объявления"
                           >
-                            {contactPriceShare == null
-                              ? 'Контакт: —'
-                              : `Контакт: ${format(contactPriceShare, 'contactRate')} цены`}
+                            <span>
+                              Контакт:{' '}
+                              <strong>
+                                {format(
+                                  listing.metrics.contactCost,
+                                  'contactCost',
+                                )}
+                              </strong>
+                            </span>
+                            <span>
+                              {contactPriceShare == null
+                                ? '— от цены'
+                                : `${format(contactPriceShare, 'contactRate')} от цены`}
+                            </span>
                           </small>
                         )}
                       </td>
