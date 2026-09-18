@@ -43,6 +43,8 @@ assert.equal(number('0'), 0);
 assert.equal(format(1200, 'views', true), '1,2\u00a0тыс.');
 assert.equal(format(1250, 'views', true), '1,25\u00a0тыс.');
 assert.equal(format(1200000, 'views', true), '1,2\u00a0млн');
+assert.equal(format(2168160.4, 'stock'), '2,168\u00a0млн\u00a0₽');
+assert.equal(format(888077.8, 'stock'), '0,888\u00a0млн\u00a0₽');
 assert.equal(
   aggregate(
     [

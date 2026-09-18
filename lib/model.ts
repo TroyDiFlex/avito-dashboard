@@ -315,12 +315,18 @@ export function format(
   if (value == null || !Number.isFinite(value)) return '—';
   const { unit } = METRICS[metric];
   const v = unit === 'percent' ? value * 100 : value;
-  const key = `${unit}:${compact}`;
+  const stockMillions = metric === 'stock' && !compact;
+  const key = stockMillions ? 'stock:millions' : `${unit}:${compact}`;
   let formatter = numberFormats.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat(
       'ru-RU',
-      compact
+      stockMillions
+        ? {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3,
+          }
+        : compact
         ? {
             notation: 'compact',
             // Keep enough precision to distinguish neighboring axis ticks.
@@ -335,7 +341,8 @@ export function format(
     );
     numberFormats.set(key, formatter);
   }
-  const text = formatter.format(v);
+  const text = formatter.format(stockMillions ? v / 1_000_000 : v);
+  if (stockMillions) return `${text}\u00a0млн\u00a0₽`;
   return (
     text +
     (unit === 'percent'
