@@ -271,6 +271,21 @@ export function ratio(
 ): number | null {
   return a == null || b == null || b === 0 ? null : a / b;
 }
+export function contactCostPriceShare(
+  spend: number | null | undefined,
+  contacts: number | null | undefined,
+  price: number | null | undefined,
+): number | null {
+  if (
+    spend == null ||
+    contacts == null ||
+    price == null ||
+    contacts <= 0 ||
+    price <= 0
+  )
+    return null;
+  return spend / contacts / price;
+}
 export function sum(rows: Metrics[], key: Metric): number | null {
   if (!rows.length || rows.some((r) => r[key] == null)) return null;
   return rows.reduce((total, r) => total + (r[key] as number), 0);

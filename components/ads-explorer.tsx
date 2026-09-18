@@ -18,6 +18,7 @@ import {
   BRANCH_COLORS,
   METRICS,
   aggregate,
+  contactCostPriceShare,
   format,
   type AdRow,
   type Metric,
@@ -34,6 +35,7 @@ const RANK_METRICS: Metric[] = [
   'favorites',
   'contactRate',
   'impressions',
+  'spend',
 ];
 const TABLE_METRICS: Metric[] = [
   'impressions',
@@ -365,6 +367,11 @@ export default function AdsExplorer({
               {pageRows.map((listing) => {
                 const selected = chartKeys.includes(listing.key);
                 const url = avitoUrl(listing.id);
+                const contactPriceShare = contactCostPriceShare(
+                  listing.metrics.spend,
+                  listing.metrics.contacts,
+                  listing.price,
+                );
                 return (
                   <tr
                     key={listing.key}
@@ -425,6 +432,16 @@ export default function AdsExplorer({
                         className={rankMetric === metric ? 'ranked-column' : ''}
                       >
                         <b>{format(listing.metrics[metric], metric)}</b>
+                        {metric === 'spend' && (
+                          <small
+                            className="contact-price-share"
+                            title="Стоимость контакта как доля цены объявления"
+                          >
+                            {contactPriceShare == null
+                              ? 'Контакт: —'
+                              : `Контакт: ${format(contactPriceShare, 'contactRate')} цены`}
+                          </small>
+                        )}
                       </td>
                     ))}
                     <td>

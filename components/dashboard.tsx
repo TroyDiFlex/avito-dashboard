@@ -119,11 +119,11 @@ function Sidebar({
         <button className={tab === 'dynamics' ? 'active' : ''} onClick={() => onTabChange('dynamics')}>
           <LineChart /><span>Динамика</span>
         </button>
-        <button className={tab === 'parts' ? 'active' : ''} onClick={() => onTabChange('parts')}>
-          <PackageSearch /><span>Запчасти</span>
-        </button>
         <button className={tab === 'ads' ? 'active' : ''} onClick={() => onTabChange('ads')}>
           <Megaphone /><span>Объявления</span>
+        </button>
+        <button className={tab === 'parts' ? 'active' : ''} onClick={() => onTabChange('parts')}>
+          <PackageSearch /><span>Запчасти</span>
         </button>
       </nav>
       <div className="sidebar-footer">
