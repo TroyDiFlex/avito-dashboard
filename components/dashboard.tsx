@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Check,
+  Lightbulb,
   LineChart,
   Megaphone,
   PackageSearch,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import AdsExplorer from '@/components/ads-explorer';
 import Comparison from '@/components/comparison';
+import Insights from '@/components/insights';
 import Overview from '@/components/overview';
 import PartExplorer from '@/components/part-explorer';
 import PeriodPicker from '@/components/period-picker';
@@ -50,10 +52,11 @@ import {
 } from '@/lib/model';
 import { normalize, type RawPayload } from '@/lib/normalize';
 
-type Tab = 'overview' | 'dynamics' | 'parts' | 'ads';
+type Tab = 'overview' | 'insights' | 'dynamics' | 'parts' | 'ads';
 type NoticeKind = 'progress' | 'success' | 'warning' | 'error';
 const TITLES: Record<Tab, string> = {
   overview: 'Обзор недели',
+  insights: 'Точки роста',
   dynamics: 'Динамика',
   parts: 'Запчасти',
   ads: 'Объявления',
@@ -63,7 +66,9 @@ const DEFAULT_VISIBLE_BRANCHES = BRANCHES.filter((branch) => branch !== 'К20');
 function storedVisibleBranches() {
   if (typeof window === 'undefined') return DEFAULT_VISIBLE_BRANCHES;
   try {
-    const saved = JSON.parse(localStorage.getItem('pik-visible-branches') ?? 'null');
+    const saved = JSON.parse(
+      localStorage.getItem('pik-visible-branches') ?? 'null',
+    );
     if (!Array.isArray(saved)) return DEFAULT_VISIBLE_BRANCHES;
     const valid = BRANCHES.filter((branch) => saved.includes(branch));
     return valid.length ? valid : DEFAULT_VISIBLE_BRANCHES;
@@ -109,29 +114,63 @@ function Sidebar({
 
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
-      <button className="brand" onClick={() => onTabChange('overview')} aria-label="Перейти к обзору">
-        <span><strong>ПИК</strong><small>АНАЛИТИКА АВИТО</small></span>
+      <button
+        className="brand"
+        onClick={() => onTabChange('overview')}
+        aria-label="Перейти к обзору"
+      >
+        <span>
+          <strong>ПИК</strong>
+          <small>АНАЛИТИКА АВИТО</small>
+        </span>
       </button>
       <nav aria-label="Разделы">
-        <button className={tab === 'overview' ? 'active' : ''} onClick={() => onTabChange('overview')}>
-          <BarChart3 /><span>Обзор недели</span>
+        <button
+          className={tab === 'overview' ? 'active' : ''}
+          onClick={() => onTabChange('overview')}
+        >
+          <BarChart3 />
+          <span>Обзор недели</span>
         </button>
-        <button className={tab === 'dynamics' ? 'active' : ''} onClick={() => onTabChange('dynamics')}>
-          <LineChart /><span>Динамика</span>
+        <button
+          className={tab === 'insights' ? 'active' : ''}
+          onClick={() => onTabChange('insights')}
+        >
+          <Lightbulb />
+          <span>Точки роста</span>
         </button>
-        <button className={tab === 'ads' ? 'active' : ''} onClick={() => onTabChange('ads')}>
-          <Megaphone /><span>Объявления</span>
+        <button
+          className={tab === 'dynamics' ? 'active' : ''}
+          onClick={() => onTabChange('dynamics')}
+        >
+          <LineChart />
+          <span>Динамика</span>
         </button>
-        <button className={tab === 'parts' ? 'active' : ''} onClick={() => onTabChange('parts')}>
-          <PackageSearch /><span>Запчасти</span>
+        <button
+          className={tab === 'ads' ? 'active' : ''}
+          onClick={() => onTabChange('ads')}
+        >
+          <Megaphone />
+          <span>Объявления</span>
+        </button>
+        <button
+          className={tab === 'parts' ? 'active' : ''}
+          onClick={() => onTabChange('parts')}
+        >
+          <PackageSearch />
+          <span>Запчасти</span>
         </button>
       </nav>
       <div className="sidebar-footer">
         <button onClick={onShowIssues}>
-          <TriangleAlert /><span>Проверка данных</span>
+          <TriangleAlert />
+          <span>Проверка данных</span>
           {issueCount > 0 && <b>{issueCount}</b>}
         </button>
-        <button onClick={onShowSettings}><Settings2 /><span>Настройки</span></button>
+        <button onClick={onShowSettings}>
+          <Settings2 />
+          <span>Настройки</span>
+        </button>
         <span className="connection-state">
           <i className={configured ? 'online' : ''} />
           <span>
@@ -147,7 +186,9 @@ function Sidebar({
           onClick={() => setCollapsed((value) => !value)}
           aria-expanded={!collapsed}
           aria-label={
-            collapsed ? 'Закрепить боковое меню раскрытым' : 'Свернуть боковое меню'
+            collapsed
+              ? 'Закрепить боковое меню раскрытым'
+              : 'Свернуть боковое меню'
           }
           title={collapsed ? 'Закрепить раскрытым' : 'Свернуть меню'}
         >
@@ -177,7 +218,10 @@ export default function Dashboard() {
   const [noticeKind, setNoticeKind] = useState<NoticeKind>('progress');
   const [settingNotice, setSettingNotice] = useState('');
   const [visibleBranches, setVisibleBranches] = useState(storedVisibleBranches);
-  const [partTarget, setPartTarget] = useState<{ branch: string; id: string } | null>(null);
+  const [partTarget, setPartTarget] = useState<{
+    branch: string;
+    id: string;
+  } | null>(null);
 
   function changeTab(nextTab: Tab) {
     if (nextTab !== 'parts') setPartTarget(null);
@@ -219,7 +263,8 @@ export default function Dashboard() {
     } = {};
     try {
       const parsed = JSON.parse(localStorage.getItem('pik-filters') ?? '{}');
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) saved = parsed;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+        saved = parsed;
     } catch {
       /* Defaults are safe. */
     }
@@ -227,8 +272,14 @@ export default function Dashboard() {
     setFrom(restored.from);
     setTo(restored.to);
     setPeriod(restored.period);
-    if (saved.branch && visibleBranches.includes(saved.branch)) setBranch(saved.branch);
-    if (saved.tab === 'overview' || saved.tab === 'dynamics' || saved.tab === 'parts') {
+    if (saved.branch && visibleBranches.includes(saved.branch))
+      setBranch(saved.branch);
+    if (
+      saved.tab === 'overview' ||
+      saved.tab === 'insights' ||
+      saved.tab === 'dynamics' ||
+      saved.tab === 'parts'
+    ) {
       setTab(saved.tab);
     } else if (saved.tab === 'ads') {
       setTab(saved.navigationVersion === 2 ? 'ads' : 'parts');
@@ -250,7 +301,9 @@ export default function Dashboard() {
       response = await fetch('/data/snapshot.json', { cache: 'no-store' });
     }
     if (!response.ok) {
-      throw new Error('Данные ещё не загружены. Подключите таблицы и нажмите «Обновить».');
+      throw new Error(
+        'Данные ещё не загружены. Подключите таблицы и нажмите «Обновить».',
+      );
     }
     applySnapshot((await response.json()) as Snapshot, initial);
   }
@@ -259,7 +312,9 @@ export default function Dashboard() {
   useEffect(() => {
     // oxlint-disable-next-line react/react-compiler -- Loading persisted external state is intentional.
     load(true).catch((error) => {
-      setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить данные.');
+      setLoadError(
+        error instanceof Error ? error.message : 'Не удалось загрузить данные.',
+      );
     });
     if (isStaticApp()) {
       const connection = browserConnection();
@@ -269,7 +324,10 @@ export default function Dashboard() {
       });
     } else {
       fetch('/api/settings')
-        .then((response) => response.json() as Promise<{ configured: boolean; url?: string }>)
+        .then(
+          (response) =>
+            response.json() as Promise<{ configured: boolean; url?: string }>,
+        )
         .then((value) => {
           setConfigured(Boolean(value.configured));
           if (value.url) setScriptUrl(value.url);
@@ -293,7 +351,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('pik-visible-branches', JSON.stringify(visibleBranches));
+      localStorage.setItem(
+        'pik-visible-branches',
+        JSON.stringify(visibleBranches),
+      );
     } catch {
       /* Device preferences are optional. */
     }
@@ -308,7 +369,10 @@ export default function Dashboard() {
       return;
     }
     setVisibleBranches(
-      BRANCHES.filter((branchName) => visibleBranches.includes(branchName) || branchName === name),
+      BRANCHES.filter(
+        (branchName) =>
+          visibleBranches.includes(branchName) || branchName === name,
+      ),
     );
   }
 
@@ -319,7 +383,12 @@ export default function Dashboard() {
   const relevantBranches = visibleBranches.filter((name) =>
     scopeBranches(branch).includes(name),
   );
-  const relevantIssues = filterIssues(snapshot?.issues ?? [], relevantBranches, from, to);
+  const relevantIssues = filterIssues(
+    snapshot?.issues ?? [],
+    relevantBranches,
+    from,
+    to,
+  );
 
   async function refresh() {
     if (!configured) {
@@ -368,18 +437,27 @@ export default function Dashboard() {
           );
         } else {
           setNoticeKind('success');
-          setNotice(`Готово. Загружено ${next.ads.length.toLocaleString('ru-RU')} записей.`);
+          setNotice(
+            `Готово. Загружено ${next.ads.length.toLocaleString('ru-RU')} записей.`,
+          );
         }
       } else {
         const response = await fetch('/api/refresh', { method: 'POST' });
-        const result = (await response.json()) as { error?: string; rows?: number };
-        if (!response.ok) throw new Error(result.error ?? 'Не удалось обновить данные.');
+        const result = (await response.json()) as {
+          error?: string;
+          rows?: number;
+        };
+        if (!response.ok)
+          throw new Error(result.error ?? 'Не удалось обновить данные.');
         await load();
         setNoticeKind('success');
-        setNotice(`Готово. Загружено ${(result.rows ?? 0).toLocaleString('ru-RU')} записей.`);
+        setNotice(
+          `Готово. Загружено ${(result.rows ?? 0).toLocaleString('ru-RU')} записей.`,
+        );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Ошибка обновления.';
+      const message =
+        error instanceof Error ? error.message : 'Ошибка обновления.';
       setNoticeKind('error');
       setNotice(`${message} Предыдущая версия сохранена.`);
     } finally {
@@ -394,8 +472,14 @@ export default function Dashboard() {
       if (isStaticApp()) {
         const url = scriptUrl.trim();
         const secret = token.trim();
-        if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url)) {
-          throw new Error('Нужна ссылка Apps Script, заканчивающаяся на /exec.');
+        if (
+          !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(
+            url,
+          )
+        ) {
+          throw new Error(
+            'Нужна ссылка Apps Script, заканчивающаяся на /exec.',
+          );
         }
         if (secret.length < 24) throw new Error('Введите ключ SYNC_TOKEN.');
         saveBrowserConnection(url, secret);
@@ -409,13 +493,16 @@ export default function Dashboard() {
           body: JSON.stringify({ url: scriptUrl.trim(), token: token.trim() }),
         });
         const result = (await response.json()) as { error?: string };
-        if (!response.ok) throw new Error(result.error ?? 'Не удалось сохранить подключение.');
+        if (!response.ok)
+          throw new Error(result.error ?? 'Не удалось сохранить подключение.');
         setConfigured(true);
         setToken('');
         setSettingNotice('Подключение сохранено.');
       }
     } catch (error) {
-      setSettingNotice(error instanceof Error ? error.message : 'Ошибка сохранения.');
+      setSettingNotice(
+        error instanceof Error ? error.message : 'Ошибка сохранения.',
+      );
     } finally {
       setBusy(false);
     }
@@ -435,7 +522,10 @@ export default function Dashboard() {
 
       <main className="workspace">
         <header className="topbar">
-          <div><span>АНАЛИТИКА АВИТО</span><h1>{TITLES[tab]}</h1></div>
+          <div>
+            <span>АНАЛИТИКА АВИТО</span>
+            <h1>{TITLES[tab]}</h1>
+          </div>
           <div className="topbar-actions">
             {snapshot && (
               <span className="updated-at">
@@ -448,7 +538,11 @@ export default function Dashboard() {
                 </strong>
               </span>
             )}
-            <Button className="refresh-button" disabled={busy} onClick={refresh}>
+            <Button
+              className="refresh-button"
+              disabled={busy}
+              onClick={refresh}
+            >
               <RefreshCw className={busy ? 'spin' : ''} />
               {busy ? 'Обновляем…' : 'Обновить'}
             </Button>
@@ -465,7 +559,11 @@ export default function Dashboard() {
               max={bounds.max}
               period={period}
               onApply={(start, end, nextPeriod) => {
-                if (validRange(start, end) && start >= bounds.min && end <= bounds.max) {
+                if (
+                  validRange(start, end) &&
+                  start >= bounds.min &&
+                  end <= bounds.max
+                ) {
                   setFrom(start);
                   setTo(end);
                   setPeriod(nextPeriod);
@@ -479,22 +577,34 @@ export default function Dashboard() {
         {notice && (
           <output className={`notice ${noticeKind}`}>
             {notice}
-            <button onClick={() => setNotice('')} aria-label="Закрыть сообщение"><X /></button>
+            <button
+              onClick={() => setNotice('')}
+              aria-label="Закрыть сообщение"
+            >
+              <X />
+            </button>
           </output>
         )}
         {snapshot?.mode === 'demo' && !notice && (
           <div className="demo-banner">
-            <span><strong>Демонстрационные данные.</strong> Подключите таблицы для рабочей статистики.</span>
+            <span>
+              <strong>Демонстрационные данные.</strong> Подключите таблицы для
+              рабочей статистики.
+            </span>
             <button onClick={() => setShowSettings(true)}>Подключить</button>
           </div>
         )}
         {loadError && (
           <div className="notice error">
-            {loadError}<button onClick={() => setShowSettings(true)}>Подключить</button>
+            {loadError}
+            <button onClick={() => setShowSettings(true)}>Подключить</button>
           </div>
         )}
         {!snapshot && !loadError && (
-          <div className="loading-state"><RefreshCw className="spin" />Загружаем данные…</div>
+          <div className="loading-state">
+            <RefreshCw className="spin" />
+            Загружаем данные…
+          </div>
         )}
 
         {snapshot && (
@@ -520,9 +630,27 @@ export default function Dashboard() {
                   availableBranches={visibleBranches}
                 />
               )}
+              {tab === 'insights' && (
+                <Insights
+                  snapshot={snapshot}
+                  from={from}
+                  to={to}
+                  initialBranch={branch}
+                  availableBranches={visibleBranches}
+                  onOpenPart={(ad) => {
+                    setPartTarget(ad);
+                    setTab('parts');
+                    window.scrollTo({ top: 0, behavior: 'auto' });
+                  }}
+                />
+              )}
               {tab === 'parts' && (
                 <PartExplorer
-                  key={partTarget ? `${partTarget.branch}:${partTarget.id}` : branch}
+                  key={
+                    partTarget
+                      ? `${partTarget.branch}:${partTarget.id}`
+                      : branch
+                  }
                   snapshot={snapshot}
                   from={from}
                   to={to}
@@ -555,7 +683,8 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle>Настройки</DialogTitle>
             <DialogDescription>
-              Выберите подразделения для отчётов и настройте подключение к таблицам.
+              Выберите подразделения для отчётов и настройте подключение к
+              таблицам.
             </DialogDescription>
           </DialogHeader>
           <section className="settings-section">
@@ -568,7 +697,10 @@ export default function Dashboard() {
                 const checked = visibleBranches.includes(name);
                 return (
                   <label className="settings-branch-row" key={name}>
-                    <span><i style={{ background: BRANCH_COLORS[name] }} />{name}</span>
+                    <span>
+                      <i style={{ background: BRANCH_COLORS[name] }} />
+                      {name}
+                    </span>
                     <Switch
                       checked={checked}
                       disabled={checked && visibleBranches.length === 1}
@@ -601,11 +733,20 @@ export default function Dashboard() {
                 type="password"
                 value={token}
                 onChange={(event) => setToken(event.target.value)}
-                placeholder={configured ? 'Введите только для изменения' : 'Ключ из свойств скрипта'}
+                placeholder={
+                  configured
+                    ? 'Введите только для изменения'
+                    : 'Ключ из свойств скрипта'
+                }
               />
             </label>
-            {settingNotice && <output className="dialog-notice">{settingNotice}</output>}
-            <Button disabled={busy} onClick={saveSettings}><Check />Сохранить подключение</Button>
+            {settingNotice && (
+              <output className="dialog-notice">{settingNotice}</output>
+            )}
+            <Button disabled={busy} onClick={saveSettings}>
+              <Check />
+              Сохранить подключение
+            </Button>
           </section>
         </DialogContent>
       </Dialog>
@@ -614,7 +755,9 @@ export default function Dashboard() {
         <DialogContent className="issues-dialog">
           <DialogHeader>
             <DialogTitle>Проверка данных</DialogTitle>
-            <DialogDescription>Замечания источника для всех подразделений за выбранный период.</DialogDescription>
+            <DialogDescription>
+              Замечания источника для всех подразделений за выбранный период.
+            </DialogDescription>
           </DialogHeader>
           <div className="issues-list">
             {relevantIssues.length ? (

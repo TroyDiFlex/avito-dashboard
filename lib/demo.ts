@@ -61,11 +61,20 @@ export function demoSnapshot(): Snapshot {
         column: week + 1,
       });
       names.forEach((name, adIndex) => {
-        const adViews = Math.round((26 + adIndex * 7 + branchIndex * 4) * wave);
-        const adContacts = Math.max(
+        let adViews = Math.round((26 + adIndex * 7 + branchIndex * 4) * wave);
+        let adContacts = Math.max(
           0,
           Math.round(adViews * (0.045 + adIndex * 0.005)),
         );
+        // Demonstration-only cases for the explainable signal engine.
+        if (branch === 'Ворошилова' && adIndex === 0)
+          adContacts = week >= 22 ? 0 : Math.round(adViews * 0.16);
+        if (branch === 'Автово' && adIndex === 1 && week >= 22) {
+          adViews = Math.max(1, Math.round(adViews * 0.24));
+          adContacts = Math.round(adViews * 0.05);
+        }
+        if (branch === 'И31' && adIndex === 2 && week >= 20)
+          adContacts = Math.round(adViews * 0.2);
         ads.push({
           branch,
           id: `${branchIndex + 1}-${adIndex + 1}`,

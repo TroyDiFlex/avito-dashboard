@@ -12,14 +12,21 @@ registerHooks({
   resolve(specifier, context, next) {
     if (
       specifier.startsWith('@/') ||
-      (specifier.startsWith('.') && context.parentURL?.startsWith(pathToFileURL(root).href))
+      (specifier.startsWith('.') &&
+        context.parentURL?.startsWith(pathToFileURL(root).href))
     ) {
       const base = specifier.startsWith('@/')
         ? path.resolve(root, specifier.slice(2))
-        : path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier);
+        : path.resolve(
+            path.dirname(fileURLToPath(context.parentURL)),
+            specifier,
+          );
       const file = ['', '.ts', '.tsx', '.js']
         .map((extension) => base + extension)
-        .find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+        .find(
+          (candidate) =>
+            fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
+        );
       if (file) return { url: pathToFileURL(file).href, shortCircuit: true };
     }
     return next(specifier, context);
@@ -33,13 +40,16 @@ registerHooks({
       return {
         format: 'module',
         shortCircuit: true,
-        source: ts.transpileModule(fs.readFileSync(fileURLToPath(url), 'utf8'), {
-          compilerOptions: {
-            target: ts.ScriptTarget.ES2022,
-            module: ts.ModuleKind.ESNext,
-            jsx: ts.JsxEmit.ReactJSX,
+        source: ts.transpileModule(
+          fs.readFileSync(fileURLToPath(url), 'utf8'),
+          {
+            compilerOptions: {
+              target: ts.ScriptTarget.ES2022,
+              module: ts.ModuleKind.ESNext,
+              jsx: ts.JsxEmit.ReactJSX,
+            },
           },
-        }).outputText,
+        ).outputText,
       };
     }
     return next(url, context);
@@ -47,6 +57,8 @@ registerHooks({
 });
 
 const { default: Overview } = await import('../components/overview.tsx');
+const { default: Insights } = await import('../components/insights.tsx');
+const { demoSnapshot } = await import('../lib/demo.ts');
 const { METRICS } = await import('../lib/model.ts');
 const branches = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
 const row = (branch, end, contacts) => ({
@@ -98,11 +110,36 @@ for (const branch of branches) assert.ok(html.includes(branch));
 for (const metric of Object.values(METRICS)) {
   assert.ok(
     html.includes(
-      metric.label.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
+      metric.label
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;'),
     ),
   );
 }
 assert.ok(html.includes('125'));
 assert.ok(html.includes('100'));
 assert.ok(!html.includes('NaN') && !html.includes('Infinity'));
-console.log('Passed: one switchable overview table, five branches and all metrics render.');
+console.log(
+  'Passed: one switchable overview table, five branches and all metrics render.',
+);
+
+const insightsHtml = renderToStaticMarkup(
+  createElement(Insights, {
+    snapshot: demoSnapshot(),
+    from: '2026-03-23',
+    to: '2026-08-31',
+    availableBranches: branches,
+    initialBranch: 'network',
+    onOpenPart() {},
+  }),
+);
+assert.ok(insightsHtml.includes('Точки роста'));
+assert.ok(insightsHtml.includes('ДОСТАТОЧНОСТЬ ДАННЫХ'));
+assert.ok(insightsHtml.includes('Почему данных достаточно'));
+assert.ok(insightsHtml.includes('Требуют внимания'));
+assert.ok(insightsHtml.includes('Успешные примеры'));
+assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
+console.log(
+  'Passed: insights, sufficiency explanations and demo signals render.',
+);
