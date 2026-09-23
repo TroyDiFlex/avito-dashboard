@@ -11,6 +11,11 @@ export type InsightKind =
   | 'reach-drop'
   | 'view-rate-drop'
   | 'contact-rate-drop'
+  | 'persistent-low-reach'
+  | 'persistent-no-result'
+  | 'portfolio-view-gap'
+  | 'portfolio-contact-gap'
+  | 'portfolio-winner'
   | 'peer-gap'
   | 'peer-winner'
   | 'duplicate';
@@ -20,6 +25,11 @@ export const INSIGHT_KIND_LABELS: Record<InsightKind, string> = {
   'reach-drop': 'Снижение охвата',
   'view-rate-drop': 'Мало просмотров',
   'contact-rate-drop': 'Мало контактов',
+  'persistent-low-reach': 'Стабильно низкий охват',
+  'persistent-no-result': 'Долго без результата',
+  'portfolio-view-gap': 'Хуже среднего по просмотрам',
+  'portfolio-contact-gap': 'Хуже среднего по контактам',
+  'portfolio-winner': 'Лидер подразделения',
   'peer-gap': 'Хуже других подразделений',
   'peer-winner': 'Успешный пример',
   duplicate: 'Возможный дубль',
@@ -59,6 +69,12 @@ export interface InsightDiagnostics {
   noComparablePeers: number;
   listingsWithConclusions: number;
   withoutConclusion: number;
+  recentDeclines: number;
+  persistentWeak: number;
+  opportunities: number;
+  structuralChecks: number;
+  insufficientHistory: number;
+  observedWithoutIssue: number;
 }
 
 export interface InsightReport {
@@ -124,9 +140,27 @@ interface ReachCandidate {
   relativeMad: number;
 }
 
-const MIN_HISTORY_REPORTS = 6;
-const CURRENT_REPORTS = 2;
+interface PortfolioRateTest {
+  id: string;
+  kind: 'portfolio-view-gap' | 'portfolio-contact-gap';
+  listing: ListingSeries;
+  rows: AdRow[];
+  numerator: Metric;
+  denominator: Metric;
+  successes: number;
+  trials: number;
+  peerSuccesses: number;
+  peerTrials: number;
+  rate: number;
+  peerRate: number;
+  expected: number;
+  pValue: number;
+}
+
+const MIN_OBSERVATION_REPORTS = 6;
+const CURRENT_REPORTS = 4;
 const BASELINE_REPORTS = 8;
+const PORTFOLIO_REPORTS = 8;
 const FDR_LIMIT = 0.05;
 
 const numberFormat = new Intl.NumberFormat('ru-RU', {
@@ -150,6 +184,15 @@ function median(values: number[]): number | null {
   return sorted.length % 2
     ? sorted[middle]
     : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function groupBy<T>(values: T[], keyFor: (value: T) => string) {
+  const groups = new Map<string, T[]>();
+  values.forEach((value) => {
+    const key = keyFor(value);
+    groups.set(key, [...(groups.get(key) ?? []), value]);
+  });
+  return groups;
 }
 
 function sumMetric(rows: AdRow[], metric: Metric): number | null {
@@ -306,7 +349,7 @@ function rateTest(
   listing: ListingSeries,
   kind: RateTest['kind'],
 ): RateTest | null {
-  if (listing.rows.length < MIN_HISTORY_REPORTS) return null;
+  if (listing.rows.length < MIN_OBSERVATION_REPORTS) return null;
   const currentRows = listing.rows.slice(-CURRENT_REPORTS);
   const baselineRows = listing.rows.slice(
     -CURRENT_REPORTS - BASELINE_REPORTS,
@@ -417,7 +460,7 @@ function rateInsight(test: RateTest): Insight {
 }
 
 function reachCandidate(listing: ListingSeries): ReachCandidate | null {
-  if (listing.rows.length < MIN_HISTORY_REPORTS) return null;
+  if (listing.rows.length < MIN_OBSERVATION_REPORTS) return null;
   const current = listing.rows.slice(-CURRENT_REPORTS);
   const baseline = listing.rows.slice(
     -CURRENT_REPORTS - BASELINE_REPORTS,
@@ -435,7 +478,7 @@ function reachCandidate(listing: ListingSeries): ReachCandidate | null {
   const cleanBaseline = baselineValues as number[];
   const cleanCurrent = currentValues as number[];
   const baselineMedian = median(cleanBaseline);
-  if (baselineMedian == null || baselineMedian < 100) return null;
+  if (baselineMedian == null || baselineMedian < 10) return null;
   const mad = median(
     cleanBaseline.map((value) => Math.abs(value - baselineMedian)),
   );
@@ -445,9 +488,9 @@ function reachCandidate(listing: ListingSeries): ReachCandidate | null {
     cleanCurrent.length;
   const drop = 1 - currentAverage / baselineMedian;
   if (
-    relativeMad > 0.45 ||
-    drop < 0.5 ||
-    cleanCurrent.some((value) => value > baselineMedian * 0.7)
+    relativeMad > 0.6 ||
+    drop < 0.6 ||
+    cleanCurrent.filter((value) => value <= baselineMedian * 0.7).length < 3
   )
     return null;
   return {
@@ -472,14 +515,13 @@ function reachInsight(candidate: ReachCandidate): Insight {
     name: candidate.listing.latest.name,
     category: candidate.listing.latest.category,
     title: 'Объявление потеряло охват',
-    summary: `Показы снизились на ${numberFormat.format(candidate.drop * 100)}% и остаются низкими два отчёта подряд.`,
-    current: `Сейчас: ${num(candidate.currentTotal)} показов за 2 отчёта`,
+    summary: `Показы снизились на ${numberFormat.format(candidate.drop * 100)}% и остаются низкими в большинстве из ${CURRENT_REPORTS} последних отчётов.`,
+    current: `Сейчас: ${num(candidate.currentTotal)} показов за ${CURRENT_REPORTS} отчёта`,
     comparison: `Раньше: медиана ${num(candidate.baselineMedian)} показов за отчёт`,
-    sufficiency: `История содержит не меньше 4 базовых и 2 текущих отчётов. База была достаточно стабильной: типичное отклонение ${percent(candidate.relativeMad)}.`,
-    method:
-      'Для охвата не предполагается идеальное случайное распределение. Сигнал требует сильного падения, стабильной базы и двух последовательных слабых отчётов.',
+    sufficiency: `История содержит не меньше 4 базовых и ${CURRENT_REPORTS} текущих отчётов. База была достаточно стабильной: типичное отклонение ${percent(candidate.relativeMad)}.`,
+    method: `Для охвата не предполагается идеальное случайное распределение. Сигнал требует сильного падения, стабильной базы и минимум трёх слабых отчётов из ${CURRENT_REPORTS} последних.`,
     facts: [
-      `Среднее за последние два отчёта: ${num(candidate.currentAverage)} показов.`,
+      `Среднее за последние ${CURRENT_REPORTS} отчёта: ${num(candidate.currentAverage)} показов.`,
       `Обычный уровень: ${num(candidate.baselineMedian)} показов за отчёт.`,
     ],
     checks: [
@@ -489,6 +531,311 @@ function reachInsight(candidate: ReachCandidate): Insight {
     ],
     score: 70 + candidate.drop * 40,
   };
+}
+
+function persistentInsights(active: ListingSeries[]): Insight[] {
+  const eligible = active.filter(
+    (listing) => listing.rows.length >= MIN_OBSERVATION_REPORTS,
+  );
+  const branchReach = new Map<string, number>();
+  const byBranch = groupBy(eligible, (listing) => listing.branch);
+  byBranch.forEach((listings, branch) => {
+    const medians = listings
+      .map((listing) =>
+        median(
+          listing.rows
+            .slice(-MIN_OBSERVATION_REPORTS)
+            .map((row) => row.metrics.impressions)
+            .filter((value): value is number => value != null),
+        ),
+      )
+      .filter((value): value is number => value != null);
+    const branchMedian = median(medians);
+    if (branchMedian != null && branchMedian > 0)
+      branchReach.set(branch, branchMedian);
+  });
+
+  return eligible.flatMap((listing) => {
+    const recent = listing.rows.slice(-MIN_OBSERVATION_REPORTS);
+    const lastFour = listing.rows.slice(-4);
+    const impressions = sumMetric(listing.rows, 'impressions');
+    const views = sumMetric(listing.rows, 'views');
+    const contacts = sumMetric(listing.rows, 'contacts');
+    const recentContacts = sumMetric(recent, 'contacts');
+    const lastFourContacts = sumMetric(lastFour, 'contacts');
+    const recentImpressions = recent
+      .map((row) => row.metrics.impressions)
+      .filter((value): value is number => value != null);
+    if (
+      impressions == null ||
+      views == null ||
+      contacts == null ||
+      recentContacts == null ||
+      lastFourContacts == null ||
+      recentImpressions.length !== recent.length
+    )
+      return [];
+    const listingReach = median(recentImpressions);
+    const typicalReach = branchReach.get(listing.branch);
+    const lowReach =
+      listingReach != null &&
+      typicalReach != null &&
+      listingReach <= typicalReach * 0.4 &&
+      recentContacts === 0;
+    const contactPace = contacts / (listing.rows.length / 4);
+    const persistentlyWeak =
+      contacts === 0 ||
+      (listing.rows.length >= 8 && contactPace < 0.5 && lastFourContacts === 0);
+    if (!lowReach && !persistentlyWeak) return [];
+
+    const weakReach = lowReach;
+    return [
+      {
+        id: `${weakReach ? 'persistent-low-reach' : 'persistent-no-result'}:${listing.key}`,
+        kind: weakReach ? 'persistent-low-reach' : 'persistent-no-result',
+        tone: contacts === 0 && listing.rows.length >= 10 ? 'high' : 'medium',
+        branch: listing.branch,
+        listingId: listing.id,
+        listingKey: listing.key,
+        article: listing.article,
+        name: listing.latest.name,
+        category: listing.latest.category,
+        title: weakReach
+          ? 'Объявление стабильно почти не получает охват'
+          : contacts === 0
+            ? 'За длительный период не было ни одного контакта'
+            : 'Объявление стабильно приносит мало контактов',
+        summary: weakReach
+          ? `Типичный охват за последние ${MIN_OBSERVATION_REPORTS} отчётов — ${num(listingReach!)} показа против ${num(typicalReach!)} у активных объявлений подразделения.`
+          : contacts === 0
+            ? `За ${listing.rows.length} отчётов накоплено ${num(impressions)} показов и ${num(views)} просмотров, но контактов не было.`
+            : `За ${listing.rows.length} отчётов получено ${num(contacts)} контакта, а в последних четырёх — ни одного.`,
+        current: `За историю: ${num(impressions)} показов · ${num(views)} просмотров · ${num(contacts)} контактов`,
+        comparison: weakReach
+          ? `Медиана охвата подразделения: ${num(typicalReach!)} за отчёт`
+          : `Наблюдение: ${listing.rows.length} отчётов`,
+        sufficiency: weakReach
+          ? `Низкий охват повторяется не меньше ${MIN_OBSERVATION_REPORTS} отчётов и сравнивается с устойчивой медианой активных объявлений того же подразделения.`
+          : `Это прямой факт за ${listing.rows.length} отчётов, а не оценка по одному просмотру или одной неделе.`,
+        method: weakReach
+          ? 'Вывод относится только к охвату. Он не доказывает, что причина в карточке: возможны слабый спрос, цена, категория, ограничения или отсутствие продвижения.'
+          : views >= 30
+            ? 'Просмотров уже достаточно, чтобы отдельно проверить конверсию и предложение. Однако отсутствие контактов само по себе ещё не доказывает конкретную причину.'
+            : 'Данных достаточно, чтобы зафиксировать отсутствие результата за длительный период, но недостаточно, чтобы обвинять именно конверсию: сначала нужно увеличить или проверить трафик.',
+        facts: [
+          `${listing.rows.length} отчётов в выбранной истории.`,
+          `${num(impressions)} показов, ${num(views)} просмотров, ${num(contacts)} контактов.`,
+          `Последние 4 отчёта: ${num(lastFourContacts)} контактов.`,
+        ],
+        checks: weakReach
+          ? [
+              'Проверить публикацию и продвижение',
+              'Сравнить цену и спрос',
+              'Проверить категорию и параметры',
+            ]
+          : views >= 30
+            ? [
+                'Сравнить цену и наличие',
+                'Проверить описание и способы связи',
+                'Сравнить карточку с лидерами',
+              ]
+            : [
+                'Сначала проверить охват и спрос',
+                'Проверить заголовок и первое фото',
+                'Оценить целесообразность продвижения',
+              ],
+        score:
+          68 +
+          Math.min(listing.rows.length, 24) +
+          (contacts === 0 ? 8 : 0) +
+          Math.min(views / 10, 10),
+      } satisfies Insight,
+    ];
+  });
+}
+
+function portfolioRateTests(active: ListingSeries[]): PortfolioRateTest[] {
+  const result: PortfolioRateTest[] = [];
+  const eligible = active
+    .filter((listing) => listing.rows.length >= 4)
+    .map((listing) => ({
+      listing,
+      rows: listing.rows.slice(-PORTFOLIO_REPORTS),
+    }));
+  const byBranch = groupBy(eligible, (entry) => entry.listing.branch);
+  byBranch.forEach((entries) => {
+    for (const kind of [
+      'portfolio-view-gap',
+      'portfolio-contact-gap',
+    ] as const) {
+      const numerator: Metric =
+        kind === 'portfolio-view-gap' ? 'views' : 'contacts';
+      const denominator: Metric =
+        kind === 'portfolio-view-gap' ? 'impressions' : 'views';
+      const measured = entries
+        .map((entry) => ({
+          ...entry,
+          successes: sumMetric(entry.rows, numerator),
+          trials: sumMetric(entry.rows, denominator),
+        }))
+        .filter(
+          (
+            entry,
+          ): entry is typeof entry & {
+            successes: number;
+            trials: number;
+          } => entry.successes != null && entry.trials != null,
+        );
+      const totalSuccesses = measured.reduce(
+        (total, entry) => total + entry.successes,
+        0,
+      );
+      const totalTrials = measured.reduce(
+        (total, entry) => total + entry.trials,
+        0,
+      );
+      measured.forEach((entry) => {
+        const peerSuccesses = totalSuccesses - entry.successes;
+        const peerTrials = totalTrials - entry.trials;
+        if (
+          entry.trials <= 0 ||
+          peerTrials <= 0 ||
+          peerSuccesses < (kind === 'portfolio-view-gap' ? 100 : 20) ||
+          peerTrials < (kind === 'portfolio-view-gap' ? 500 : 200)
+        )
+          return;
+        const peerRate = peerSuccesses / peerTrials;
+        const rate = entry.successes / entry.trials;
+        const expected =
+          entry.trials * ((peerSuccesses + 0.5) / (peerTrials + 1));
+        if (expected < (kind === 'portfolio-view-gap' ? 10 : 3)) return;
+        result.push({
+          id: `${kind}:${entry.listing.key}`,
+          kind,
+          listing: entry.listing,
+          rows: entry.rows,
+          numerator,
+          denominator,
+          successes: entry.successes,
+          trials: entry.trials,
+          peerSuccesses,
+          peerTrials,
+          rate,
+          peerRate,
+          expected,
+          pValue: betaBinomialTail(
+            entry.successes,
+            entry.trials,
+            peerSuccesses,
+            peerTrials,
+            'lower',
+          ),
+        });
+      });
+    }
+  });
+  return result;
+}
+
+function portfolioRateInsight(test: PortfolioRateTest): Insight {
+  const contacts = test.kind === 'portfolio-contact-gap';
+  const gap = 1 - test.rate / test.peerRate;
+  return {
+    id: test.id,
+    kind: test.kind,
+    tone: gap >= 0.75 ? 'high' : 'medium',
+    branch: test.listing.branch,
+    listingId: test.listing.id,
+    listingKey: test.listing.key,
+    article: test.listing.article,
+    name: test.listing.latest.name,
+    category: test.listing.latest.category,
+    title: contacts
+      ? 'Просмотры есть, но контактов меньше ориентира'
+      : 'Показы есть, но просмотров меньше ориентира',
+    summary: `${contacts ? 'Конверсия в контакты' : 'Доля просмотров'} ниже среднего уровня остальных активных объявлений подразделения на ${numberFormat.format(gap * 100)}%.`,
+    current: `${num(test.successes)} из ${num(test.trials)} · ${percent(test.rate)}`,
+    comparison: `Остальные объявления: ${percent(test.peerRate)}`,
+    expected: `При среднем уровне ожидалось около ${numberFormat.format(test.expected)} ${contacts ? 'контакта' : 'просмотра'}.`,
+    sufficiency: `Взяты до ${PORTFOLIO_REPORTS} последних отчётов. Объёма достаточно, чтобы ожидать не меньше ${contacts ? '3 контактов' : '10 просмотров'}.`,
+    method: `Вероятность такого или более сильного отставания случайно — ${probabilityLabel(test.pValue)}. Сигнал прошёл защиту от массовых случайных находок. Сравнение с подразделением — ориентир, а не доказательство одинакового спроса на все детали.`,
+    facts: [
+      `${contacts ? 'Контакты' : 'Просмотры'}: ${num(test.successes)} из ${num(test.trials)}.`,
+      `Средний ориентир подразделения: ${percent(test.peerRate)}.`,
+      `${test.rows.length} отчётов в сравнении.`,
+    ],
+    checks: contacts
+      ? [
+          'Сравнить цену и наличие',
+          'Проверить описание и способы связи',
+          'Учесть спрос на конкретную деталь',
+        ]
+      : [
+          'Проверить заголовок и первое фото',
+          'Проверить категорию и параметры',
+          'Сравнить цену и спрос',
+        ],
+    score: 82 + gap * 30 + Math.min(test.expected, 10),
+    probability: test.pValue,
+  };
+}
+
+function portfolioWinners(active: ListingSeries[]): Insight[] {
+  const eligible = active
+    .filter((listing) => listing.rows.length >= 4)
+    .map((listing) => {
+      const rows = listing.rows.slice(-PORTFOLIO_REPORTS);
+      return {
+        listing,
+        rows,
+        contacts: sumMetric(rows, 'contacts'),
+        views: sumMetric(rows, 'views'),
+      };
+    })
+    .filter(
+      (entry): entry is typeof entry & { contacts: number; views: number } =>
+        entry.contacts != null && entry.views != null,
+    );
+  const byBranch = groupBy(eligible, (entry) => entry.listing.branch);
+  return eligible.flatMap((entry) => {
+    if (entry.contacts < 5 || entry.views <= 0) return [];
+    const peers = byBranch.get(entry.listing.branch) ?? [];
+    const percentile =
+      peers.filter((peer) => peer.contacts <= entry.contacts).length /
+      Math.max(1, peers.length);
+    if (percentile < 0.85) return [];
+    const rate = entry.contacts / entry.views;
+    return [
+      {
+        id: `portfolio-winner:${entry.listing.key}`,
+        kind: 'portfolio-winner',
+        tone: 'opportunity',
+        branch: entry.listing.branch,
+        listingId: entry.listing.id,
+        listingKey: entry.listing.key,
+        article: entry.listing.article,
+        name: entry.listing.latest.name,
+        category: entry.listing.latest.category,
+        title: 'Один из лидеров подразделения по контактам',
+        summary: `Объявление входит в верхние ${num(Math.max(1, Math.round((1 - percentile) * 100)))}% по числу контактов среди активных объявлений подразделения.`,
+        current: `${num(entry.contacts)} контактов · ${num(entry.views)} просмотров`,
+        comparison: `${entry.rows.length} последних отчётов · конверсия ${percent(rate)}`,
+        sufficiency: `Фактически получено не меньше 5 контактов за ${entry.rows.length} отчётов; лидерство основано на объёме результата, а не на одном успешном просмотре.`,
+        method:
+          'Это сравнительный факт внутри подразделения. Он не доказывает, что результат вызван только оформлением: на него также влияют спрос, цена, наличие и продвижение.',
+        facts: [
+          `${num(entry.contacts)} контактов из ${num(entry.views)} просмотров.`,
+          `Позиция выше ${num(percentile * 100)}% активных объявлений подразделения по контактам.`,
+        ],
+        checks: [
+          'Использовать карточку как пример для сравнения',
+          'Зафиксировать цену, фото и условия',
+          'Проверить, можно ли масштабировать продвижение',
+        ],
+        score: 48 + entry.contacts + percentile * 10,
+      } satisfies Insight,
+    ];
+  });
 }
 
 function latestPrice(listings: ListingSeries[]): number | null {
@@ -773,7 +1120,7 @@ export function buildInsightReport(
       listing.latest.end === latestDates.get(listing.branch),
   );
   const shortHistory = activeTargets.filter(
-    (listing) => listing.rows.length < MIN_HISTORY_REPORTS,
+    (listing) => listing.rows.length < MIN_OBSERVATION_REPORTS,
   ).length;
   const historyReady = activeTargets.length - shortHistory;
   const viewTests = activeTargets
@@ -785,7 +1132,7 @@ export function buildInsightReport(
   const rateTests = [...viewTests, ...contactTests];
   const lowVolume = activeTargets.filter(
     (listing) =>
-      listing.rows.length >= MIN_HISTORY_REPORTS &&
+      listing.rows.length >= MIN_OBSERVATION_REPORTS &&
       !viewTests.some((test) => test.listing.key === listing.key) &&
       !contactTests.some((test) => test.listing.key === listing.key),
   ).length;
@@ -808,7 +1155,7 @@ export function buildInsightReport(
     .filter((candidate): candidate is ReachCandidate => Boolean(candidate));
   const reachEligibility = new Map<string, number>();
   activeTargets.forEach((listing) => {
-    if (listing.rows.length >= MIN_HISTORY_REPORTS)
+    if (listing.rows.length >= CURRENT_REPORTS + 4)
       reachEligibility.set(
         listing.branch,
         (reachEligibility.get(listing.branch) ?? 0) + 1,
@@ -835,11 +1182,10 @@ export function buildInsightReport(
         name: branch,
         listingKeys: affected.map((candidate) => candidate.listing.key),
         title: 'Массовое снижение показов в подразделении',
-        summary: `${affected.length} из ${eligible} объявлений с достаточной историей одновременно потеряли не меньше половины обычного охвата.`,
+        summary: `${affected.length} из ${eligible} объявлений с достаточной историей одновременно потеряли не меньше 60% обычного охвата.`,
         current: `${affected.length} объявлений со снижением`,
         comparison: `${num((affected.length / eligible) * 100)}% проверяемых объявлений`,
-        sufficiency:
-          'Каждое объявление имеет стабильную базу и два последовательных слабых отчёта. Массовость проверяется только среди объявлений с достаточной историей.',
+        sufficiency: `Каждое объявление имеет стабильную базу и минимум три слабых отчёта из ${CURRENT_REPORTS} последних. Массовость проверяется только среди объявлений с достаточной историей.`,
         method:
           'Отдельные карточки этого снижения скрыты, чтобы не выдавать вероятную общую проблему подразделения за множество независимых проблем объявлений.',
         facts: affected
@@ -861,6 +1207,20 @@ export function buildInsightReport(
   const reachInsights = reachCandidates
     .filter((candidate) => !systemicBranches.has(candidate.listing.branch))
     .map(reachInsight);
+  const persistent = persistentInsights(activeTargets);
+  const portfolioTests = portfolioRateTests(activeTargets);
+  const portfolioInsights: Insight[] = [];
+  for (const kind of ['portfolio-view-gap', 'portfolio-contact-gap'] as const) {
+    const tests = portfolioTests.filter((test) => test.kind === kind);
+    const accepted = acceptedByFalseDiscoveryRate(
+      tests.map((test) => test.pValue),
+    );
+    tests.forEach((test, index) => {
+      if (accepted.has(index) && test.rate <= test.peerRate * 0.5)
+        portfolioInsights.push(portfolioRateInsight(test));
+    });
+  }
+  const portfolioWinnerInsights = portfolioWinners(activeTargets);
   const peerResult = peerTests(series, targetBranches, from, to);
   const peerInsights: Insight[] = [];
   for (const kind of ['peer-gap', 'peer-winner'] as const) {
@@ -883,6 +1243,9 @@ export function buildInsightReport(
     ...systemicInsights,
     ...rateInsights,
     ...reachInsights,
+    ...portfolioInsights,
+    ...persistent,
+    ...portfolioWinnerInsights,
     ...peerInsights,
     ...duplicates,
   ].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru'));
@@ -895,6 +1258,33 @@ export function buildInsightReport(
           : [],
     ),
   );
+  const recentDeclines = insights.filter((insight) =>
+    [
+      'reach-drop',
+      'view-rate-drop',
+      'contact-rate-drop',
+      'portfolio-view-gap',
+      'portfolio-contact-gap',
+      'peer-gap',
+    ].includes(insight.kind),
+  ).length;
+  const persistentWeak = persistent.length;
+  const opportunities = insights.filter(
+    (insight) => insight.tone === 'opportunity',
+  ).length;
+  const structuralChecks = insights.filter(
+    (insight) => insight.tone === 'check',
+  ).length;
+  const insufficientHistory = activeTargets.filter(
+    (listing) =>
+      listing.rows.length < MIN_OBSERVATION_REPORTS &&
+      !concludedKeys.has(listing.key),
+  ).length;
+  const observedWithoutIssue = activeTargets.filter(
+    (listing) =>
+      listing.rows.length >= MIN_OBSERVATION_REPORTS &&
+      !concludedKeys.has(listing.key),
+  ).length;
   return {
     insights,
     diagnostics: {
@@ -907,6 +1297,12 @@ export function buildInsightReport(
       noComparablePeers: peerResult.noPeers,
       listingsWithConclusions: concludedKeys.size,
       withoutConclusion: Math.max(0, activeTargets.length - concludedKeys.size),
+      recentDeclines,
+      persistentWeak,
+      opportunities,
+      structuralChecks,
+      insufficientHistory,
+      observedWithoutIssue,
     },
   };
 }

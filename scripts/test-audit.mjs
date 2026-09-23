@@ -137,8 +137,9 @@ const insightsHtml = renderToStaticMarkup(
 assert.ok(insightsHtml.includes('Точки роста'));
 assert.ok(insightsHtml.includes('ДОСТАТОЧНОСТЬ ДАННЫХ'));
 assert.ok(insightsHtml.includes('Почему данных достаточно'));
-assert.ok(insightsHtml.includes('Требуют внимания'));
-assert.ok(insightsHtml.includes('Успешные примеры'));
+assert.ok(insightsHtml.includes('Просели или отстают'));
+assert.ok(insightsHtml.includes('Стабильно слабые'));
+assert.ok(insightsHtml.includes('Сильные примеры'));
 assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
 console.log(
   'Passed: insights, sufficiency explanations and demo signals render.',

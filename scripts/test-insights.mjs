@@ -21,6 +21,8 @@ const { acceptedByFalseDiscoveryRate, buildInsightReport } =
   await import('../private/compiled/insights.js');
 
 const dates = [
+  '2026-07-13',
+  '2026-07-20',
   '2026-07-27',
   '2026-08-03',
   '2026-08-10',
@@ -101,7 +103,7 @@ const tooLittleForZeroConclusion = dates.map((end, index) =>
   ad({
     end,
     contacts: index < 4 ? (index % 2 ? 3 : 2) : 0,
-    views: index < 4 ? 25 : 10,
+    views: index < 4 ? 25 : 5,
   }),
 );
 assert.ok(
@@ -111,20 +113,22 @@ assert.ok(
   'Zero out of 20 must not be treated as a decline when the baseline only implies two expected contacts.',
 );
 
-const oneOfOne = dates.map((end) =>
+const oneOfOne = [
   ad({
-    end,
+    end: dates.at(-1),
     id: '2',
     name: 'Деталь BMW 11428683206',
     impressions: 5,
     views: 1,
     contacts: 1,
   }),
-);
+];
 assert.ok(
   !report(oneOfOne).insights.some(
     (insight) =>
-      insight.kind === 'peer-winner' || insight.kind === 'contact-rate-drop',
+      insight.kind === 'peer-winner' ||
+      insight.kind === 'portfolio-winner' ||
+      insight.kind === 'contact-rate-drop',
   ),
   'One contact from one view is not sufficient for a performance conclusion.',
 );
@@ -150,6 +154,63 @@ assert.ok(
     (insight) => insight.kind === 'reach-drop',
   ),
   'A missing current report must not be treated as zero reach.',
+);
+
+const persistentNoResult = dates.slice(0, 6).map((end) =>
+  ad({
+    end,
+    id: '4',
+    name: 'Деталь BMW 17118615963',
+    impressions: 20,
+    views: 2,
+    contacts: 0,
+  }),
+);
+assert.ok(
+  report(persistentNoResult).insights.some(
+    (insight) => insight.kind === 'persistent-no-result',
+  ),
+  'Six reports without a contact must be shown as a persistent lack of result without claiming a conversion cause.',
+);
+assert.ok(
+  !report(persistentNoResult.slice(0, 5)).insights.some(
+    (insight) => insight.kind === 'persistent-no-result',
+  ),
+  'Five reports are not enough for a persistent no-result conclusion.',
+);
+
+const portfolioViewGap = [
+  ...dates.map((end) =>
+    ad({
+      branch: 'И31',
+      id: '40',
+      name: 'Слабая карточка BMW 13718518111',
+      end,
+      impressions: 250,
+      views: 5,
+      contacts: 0,
+    }),
+  ),
+  ...['41', '42'].flatMap((id) =>
+    dates.map((end) =>
+      ad({
+        branch: 'И31',
+        id,
+        name: `Обычная карточка BMW 1371851811${id}`,
+        end,
+        impressions: 250,
+        views: 50,
+        contacts: 3,
+      }),
+    ),
+  ),
+];
+assert.ok(
+  report(portfolioViewGap).insights.some(
+    (insight) =>
+      insight.kind === 'portfolio-view-gap' && insight.listingId === '40',
+  ),
+  'A repeatedly weak view rate with enough impressions must be compared with the branch portfolio.',
 );
 
 const peerRows = ['И31', 'Х7', 'Автово'].flatMap((branch, branchIndex) =>
@@ -187,11 +248,13 @@ const winnerRows = ['И31', 'Х7', 'Автово'].flatMap((branch, branchIndex)
 );
 assert.ok(
   report(winnerRows, ['И31', 'Х7', 'Автово']).insights.some(
-    (insight) => insight.kind === 'peer-winner' && insight.branch === 'И31',
+    (insight) =>
+      (insight.kind === 'peer-winner' || insight.kind === 'portfolio-winner') &&
+      insight.branch === 'И31',
   ),
   'A high-volume listing may be shown as a positive example when it reliably beats peers.',
 );
 
 console.log(
-  'Passed: insufficient samples abstain; own-history, reach, peer-gap and winner signals require evidence.',
+  'Passed: insufficient samples abstain; persistent, own-history, portfolio, peer and winner signals require evidence.',
 );

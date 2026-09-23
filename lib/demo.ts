@@ -68,8 +68,8 @@ export function demoSnapshot(): Snapshot {
         );
         // Demonstration-only cases for the explainable signal engine.
         if (branch === 'Ворошилова' && adIndex === 0)
-          adContacts = week >= 22 ? 0 : Math.round(adViews * 0.16);
-        if (branch === 'Автово' && adIndex === 1 && week >= 22) {
+          adContacts = week >= 20 ? 0 : Math.round(adViews * 0.16);
+        if (branch === 'Автово' && adIndex === 1 && week >= 20) {
           adViews = Math.max(1, Math.round(adViews * 0.24));
           adContacts = Math.round(adViews * 0.05);
         }

@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   ArrowRight,
   ChartNoAxesCombined,
-  CheckCircle2,
   ChevronDown,
   CircleHelp,
   ExternalLink,
@@ -33,11 +32,26 @@ import {
 } from '@/lib/insights';
 import type { AdRow, Snapshot } from '@/lib/model';
 
-type ViewFilter = 'all' | 'attention' | 'opportunity' | 'check';
+type ViewFilter = 'all' | 'recent' | 'persistent' | 'opportunity' | 'check';
+
+const RECENT_KINDS = new Set<InsightKind>([
+  'reach-drop',
+  'view-rate-drop',
+  'contact-rate-drop',
+  'portfolio-view-gap',
+  'portfolio-contact-gap',
+  'peer-gap',
+]);
+const PERSISTENT_KINDS = new Set<InsightKind>([
+  'persistent-low-reach',
+  'persistent-no-result',
+]);
+const PAGE_SIZE = 60;
 
 const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
-  { value: 'attention', label: 'Требуют внимания' },
+  { value: 'recent', label: 'Просели или отстают' },
+  { value: 'persistent', label: 'Стабильно слабые' },
   { value: 'opportunity', label: 'Успешные примеры' },
   { value: 'check', label: 'Проверки' },
 ];
@@ -72,11 +86,22 @@ function InfoTip({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function insightIcon(insight: Insight) {
-  if (insight.kind === 'reach-drop') return <TrendingDown />;
-  if (insight.kind === 'view-rate-drop') return <Eye />;
-  if (insight.kind === 'contact-rate-drop' || insight.kind === 'peer-gap')
+  if (insight.kind === 'reach-drop' || insight.kind === 'persistent-low-reach')
+    return <TrendingDown />;
+  if (
+    insight.kind === 'view-rate-drop' ||
+    insight.kind === 'portfolio-view-gap'
+  )
+    return <Eye />;
+  if (
+    insight.kind === 'contact-rate-drop' ||
+    insight.kind === 'portfolio-contact-gap' ||
+    insight.kind === 'persistent-no-result' ||
+    insight.kind === 'peer-gap'
+  )
     return <MessageCircle />;
-  if (insight.kind === 'peer-winner') return <Sparkles />;
+  if (insight.kind === 'peer-winner' || insight.kind === 'portfolio-winner')
+    return <Sparkles />;
   return <Layers3 />;
 }
 
@@ -220,6 +245,19 @@ export default function Insights({
   );
   const [view, setView] = useState<ViewFilter>('all');
   const [kind, setKind] = useState<'all' | InsightKind>('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const changeView = (next: ViewFilter) => {
+    setView(next);
+    setVisibleCount(PAGE_SIZE);
+  };
+  const changeKind = (next: 'all' | InsightKind) => {
+    setKind(next);
+    setVisibleCount(PAGE_SIZE);
+  };
+  const changeScope = (next: string) => {
+    setScope(next);
+    setVisibleCount(PAGE_SIZE);
+  };
   const effectiveScope =
     scope === 'network' || availableBranches.includes(scope)
       ? scope
@@ -237,20 +275,13 @@ export default function Insights({
   const filtered = report.insights.filter((insight) => {
     const viewMatches =
       view === 'all' ||
-      (view === 'attention' &&
-        (insight.tone === 'high' || insight.tone === 'medium')) ||
-      insight.tone === view;
+      (view === 'recent' && RECENT_KINDS.has(insight.kind)) ||
+      (view === 'persistent' && PERSISTENT_KINDS.has(insight.kind)) ||
+      (view === 'opportunity' && insight.tone === 'opportunity') ||
+      (view === 'check' && insight.tone === 'check');
     return viewMatches && (kind === 'all' || insight.kind === kind);
   });
-  const attentionCount = report.insights.filter(
-    (insight) => insight.tone === 'high' || insight.tone === 'medium',
-  ).length;
-  const opportunityCount = report.insights.filter(
-    (insight) => insight.tone === 'opportunity',
-  ).length;
-  const checkCount = report.insights.filter(
-    (insight) => insight.tone === 'check',
-  ).length;
+  const displayed = filtered.slice(0, visibleCount);
   const scopes = [
     { value: 'network', label: 'Все подразделения' },
     ...availableBranches.map((value) => ({ value, label: value })),
@@ -269,8 +300,9 @@ export default function Insights({
               <InfoTip label="Что такое достаточность данных">
                 Достаточность проверяется отдельно для каждого вывода. Один
                 контакт из одного просмотра не считается доказательством успеха,
-                а ноль контактов при малом числе просмотров не считается
-                проблемой.
+                а ноль контактов при малом числе просмотров не доказывает плохую
+                конверсию. Длительное отсутствие результата учитывается
+                отдельно.
               </InfoTip>
             </p>
           </div>
@@ -279,7 +311,7 @@ export default function Insights({
             <Picker
               label="Подразделение"
               value={effectiveScope}
-              onChange={setScope}
+              onChange={changeScope}
               items={scopes}
             />
           </div>
@@ -287,46 +319,48 @@ export default function Insights({
 
         <section className="insight-summary-grid" aria-label="Сводка сигналов">
           <button
-            className={view === 'attention' ? 'active' : ''}
-            onClick={() => setView(view === 'attention' ? 'all' : 'attention')}
+            className={view === 'recent' ? 'active' : ''}
+            onClick={() => changeView(view === 'recent' ? 'all' : 'recent')}
           >
             <AlertTriangle />
-            <span>Требуют внимания</span>
-            <strong>{attentionCount}</strong>
-            <small>Только подтверждённые отклонения</small>
+            <span>Просели или отстают</span>
+            <strong>{report.diagnostics.recentDeclines}</strong>
+            <small>Изменения динамики и проблемы воронки</small>
+          </button>
+          <button
+            className={view === 'persistent' ? 'active' : ''}
+            onClick={() =>
+              changeView(view === 'persistent' ? 'all' : 'persistent')
+            }
+          >
+            <TrendingDown />
+            <span>Стабильно слабые</span>
+            <strong>{report.diagnostics.persistentWeak}</strong>
+            <small>Долго без контактов или почти без охвата</small>
           </button>
           <button
             className={view === 'opportunity' ? 'active' : ''}
             onClick={() =>
-              setView(view === 'opportunity' ? 'all' : 'opportunity')
+              changeView(view === 'opportunity' ? 'all' : 'opportunity')
             }
           >
             <Lightbulb />
-            <span>Успешные примеры</span>
-            <strong>{opportunityCount}</strong>
-            <small>Не случайные лидеры с достаточным объёмом</small>
-          </button>
-          <button
-            className={view === 'check' ? 'active' : ''}
-            onClick={() => setView(view === 'check' ? 'all' : 'check')}
-          >
-            <Layers3 />
-            <span>Проверки</span>
-            <strong>{checkCount}</strong>
-            <small>Факты без вывода об эффективности</small>
+            <span>Сильные примеры</span>
+            <strong>{report.diagnostics.opportunities}</strong>
+            <small>Лидеры с реальными контактами, не один из одного</small>
           </button>
           <div className="insight-summary-quiet">
-            <CheckCircle2 />
+            <ShieldCheck />
             <span>
-              Без подтверждённого вывода
-              <InfoTip label="Почему выводов меньше, чем объявлений">
-                Здесь одновременно находятся обычные объявления без заметных
-                отклонений и объявления, по которым пока мало данных. Они не
-                считаются ни хорошими, ни плохими.
+              Пока рано оценивать
+              <InfoTip label="Почему пока рано оценивать объявления">
+                У этих объявлений меньше шести отчётов. Они не записываются ни в
+                хорошие, ни в плохие: системе ещё не хватает длительности
+                наблюдения.
               </InfoTip>
             </span>
-            <strong>{report.diagnostics.withoutConclusion}</strong>
-            <small>Это не означает, что все они работают хорошо</small>
+            <strong>{report.diagnostics.insufficientHistory}</strong>
+            <small>Менее шести отчётов наблюдения</small>
           </div>
         </section>
 
@@ -348,30 +382,30 @@ export default function Insights({
               <strong>{report.diagnostics.activeListings}</strong>
             </span>
             <span>
-              <small>Есть история от 6 отчётов</small>
-              <strong>{report.diagnostics.listingsWithHistory}</strong>
+              <small>Есть конкретный вывод</small>
+              <strong>{report.diagnostics.listingsWithConclusions}</strong>
             </span>
             <span>
-              <small>Проверок собственной динамики</small>
-              <strong>{report.diagnostics.ownRateTests}</strong>
+              <small>Стабильно слабых</small>
+              <strong>{report.diagnostics.persistentWeak}</strong>
             </span>
             <span>
-              <small>Сетевых проверок</small>
-              <strong>{report.diagnostics.peerTests}</strong>
+              <small>Достаточно истории, отклонений не найдено</small>
+              <strong>{report.diagnostics.observedWithoutIssue}</strong>
             </span>
           </div>
           <div className="insight-exclusions">
             <span>
-              <b>{report.diagnostics.shortHistory}</b>
-              меньше 6 отчётов
+              <b>{report.diagnostics.insufficientHistory}</b>
+              пока мало истории
             </span>
             <span>
               <b>{report.diagnostics.lowVolume}</b>
-              мало показов, просмотров или контактов
+              мало трафика для оценки именно конверсии
             </span>
             <span>
-              <b>{report.diagnostics.noComparablePeers}</b>
-              недостаточно сопоставимых подразделений
+              <b>{report.diagnostics.structuralChecks}</b>
+              структурных проверок
             </span>
           </div>
           <details className="insight-methodology">
@@ -382,8 +416,14 @@ export default function Insights({
             <div>
               <p>
                 Сначала проверяется полнота истории и объём данных. Затем
-                последние два отчёта сравниваются с предыдущими четырьмя–восемью
-                или с тем же артикулом минимум в двух других подразделениях.
+                последние четыре отчёта сравниваются с предыдущими, с другими
+                объявлениями подразделения и, где возможно, с тем же артикулом
+                минимум в двух других подразделениях.
+              </p>
+              <p>
+                Длительное отсутствие результата оценивается отдельно. Ноль
+                контактов за шесть и более отчётов — уже важный факт, даже если
+                трафика ещё мало, чтобы обвинять именно конверсию.
               </p>
               <p>
                 Для конверсий учитывается неопределённость маленькой выборки.
@@ -411,7 +451,7 @@ export default function Insights({
                   <button
                     key={item.value}
                     className={view === item.value ? 'active' : ''}
-                    onClick={() => setView(item.value)}
+                    onClick={() => changeView(item.value)}
                   >
                     {item.label}
                   </button>
@@ -420,20 +460,32 @@ export default function Insights({
               <Picker
                 label="Тип сигнала"
                 value={kind}
-                onChange={(value) => setKind(value as 'all' | InsightKind)}
+                onChange={(value) => changeKind(value as 'all' | InsightKind)}
                 items={KIND_CHOICES}
               />
             </div>
           </div>
           {filtered.length ? (
             <div className="insight-list">
-              {filtered.map((insight) => (
+              {displayed.map((insight) => (
                 <InsightCard
                   key={insight.id}
                   insight={insight}
                   onOpenPart={onOpenPart}
                 />
               ))}
+              {displayed.length < filtered.length && (
+                <button
+                  type="button"
+                  className="insight-load-more"
+                  onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                >
+                  Показать ещё{' '}
+                  {Math.min(PAGE_SIZE, filtered.length - displayed.length)} из{' '}
+                  {filtered.length - displayed.length}
+                  <ArrowRight />
+                </button>
+              )}
             </div>
           ) : (
             <div className="insight-empty">
@@ -448,8 +500,8 @@ export default function Insights({
                 <button
                   type="button"
                   onClick={() => {
-                    setView('all');
-                    setKind('all');
+                    changeView('all');
+                    changeKind('all');
                   }}
                 >
                   Сбросить фильтры <ArrowRight />
