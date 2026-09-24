@@ -34,7 +34,7 @@ export const INSIGHT_KIND_LABELS: Record<InsightKind, string> = {
   'portfolio-winner': 'Лидер подразделения',
   'peer-gap': 'Хуже других подразделений',
   'peer-winner': 'Лучше того же артикула в сети',
-  duplicate: 'Возможный дубль',
+  duplicate: 'Возможные дубли',
 };
 
 export interface Insight {
@@ -1086,7 +1086,7 @@ function duplicateInsights(
         sufficiency:
           'Совпадение основано на подразделении, артикуле и наличии объявлений в последнем отчёте.',
         method:
-          'Это структурная проверка, а не статистический вывод. Она не утверждает, что дубли ухудшают результат.',
+          'Это проверка возможного дубля, а не статистический вывод. Она не утверждает, что повторные объявления ухудшают результат.',
         facts: listings.map(
           (listing) => `№ ${listing.id}: ${listing.latest.name}`,
         ),

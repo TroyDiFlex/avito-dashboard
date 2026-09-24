@@ -34,35 +34,14 @@ import { demandForArticle, normalizeDemandArticle } from '@/lib/demand';
 import { extractArticle } from '@/lib/explore';
 import type { AdRow, Snapshot } from '@/lib/model';
 
-type ViewFilter =
-  | 'all'
-  | 'recent'
-  | 'persistent'
-  | 'demand'
-  | 'opportunity'
-  | 'check';
-
-const RECENT_KINDS = new Set<InsightKind>([
-  'reach-drop',
-  'view-rate-drop',
-  'contact-rate-drop',
-  'portfolio-view-gap',
-  'portfolio-contact-gap',
-  'peer-gap',
-]);
-const PERSISTENT_KINDS = new Set<InsightKind>([
-  'persistent-low-reach',
-  'persistent-no-result',
-]);
+type ViewFilter = 'all' | 'high' | 'medium' | 'opportunity';
 const PAGE_SIZE = 60;
 
 const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
-  { value: 'recent', label: 'Просели или отстают' },
-  { value: 'persistent', label: 'Стабильно слабые' },
-  { value: 'demand', label: 'Приоритетные товары' },
-  { value: 'opportunity', label: 'Успешные примеры' },
-  { value: 'check', label: 'Проверки' },
+  { value: 'high', label: 'Высокий приоритет' },
+  { value: 'medium', label: 'Стоит проверить' },
+  { value: 'opportunity', label: 'Сильные примеры' },
 ];
 
 const NEGATIVE_KINDS = new Set<InsightKind>([
@@ -125,7 +104,7 @@ function toneLabel(tone: InsightTone) {
   if (tone === 'high') return 'Высокий приоритет';
   if (tone === 'medium') return 'Стоит проверить';
   if (tone === 'opportunity') return 'Успешный пример';
-  return 'Проверка';
+  return 'Возможный дубль';
 }
 
 function avitoUrl(id?: string) {
@@ -161,11 +140,10 @@ function demandForInsight(
 function viewMatchesInsight(view: ViewFilter, insight: Insight): boolean {
   return (
     view === 'all' ||
-    (view === 'recent' && RECENT_KINDS.has(insight.kind)) ||
-    (view === 'persistent' && PERSISTENT_KINDS.has(insight.kind)) ||
-    (view === 'demand' && insight.kind === 'demand-gap') ||
-    (view === 'opportunity' && insight.tone === 'opportunity') ||
-    (view === 'check' && insight.tone === 'check')
+    (view === 'high' && insight.tone === 'high') ||
+    (view === 'medium' &&
+      (insight.tone === 'medium' || insight.tone === 'check')) ||
+    (view === 'opportunity' && insight.tone === 'opportunity')
   );
 }
 
@@ -314,27 +292,47 @@ function InsightCard({
                 insight.name
               )}
             </h3>
-            <div className="insight-actions">
-              {url && (
-                <a href={url} target="_blank" rel="noreferrer">
-                  <ExternalLink />
-                  Открыть объявление
-                </a>
-              )}
-              {insight.listingId && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onOpenPart({
-                      branch: insight.branch,
-                      id: insight.listingId!,
-                    })
-                  }
-                >
-                  <ChartNoAxesCombined />
-                  Сравнить подразделения
-                </button>
-              )}
+            <div className="insight-header-controls">
+              <details className="insight-proof">
+                <summary>
+                  <ShieldCheck />
+                  Почему данных достаточно
+                  <ChevronDown />
+                </summary>
+                <div>
+                  <p>{insight.sufficiency}</p>
+                  <p>{insight.method}</p>
+                  {!!insight.facts.length && (
+                    <ul>
+                      {insight.facts.map((fact) => (
+                        <li key={fact}>{fact}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </details>
+              <div className="insight-actions">
+                {url && (
+                  <a href={url} target="_blank" rel="noreferrer">
+                    <ExternalLink />
+                    Открыть объявление
+                  </a>
+                )}
+                {insight.listingId && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onOpenPart({
+                        branch: insight.branch,
+                        id: insight.listingId!,
+                      })
+                    }
+                  >
+                    <ChartNoAxesCombined />
+                    Сравнить подразделения
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -374,35 +372,6 @@ function InsightCard({
         )}
       </div>
 
-      <details className="insight-proof">
-        <summary>
-          <ShieldCheck />
-          Почему данных достаточно
-          <ChevronDown />
-        </summary>
-        <div>
-          <p>{insight.sufficiency}</p>
-          <p>{insight.method}</p>
-          {!!insight.facts.length && (
-            <ul>
-              {insight.facts.map((fact) => (
-                <li key={fact}>{fact}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </details>
-
-      <footer className="insight-card-footer">
-        <div className="insight-checks">
-          <small>Что проверить</small>
-          <div>
-            {insight.checks.map((check) => (
-              <span key={check}>{check}</span>
-            ))}
-          </div>
-        </div>
-      </footer>
     </article>
   );
 }
@@ -489,24 +458,26 @@ export default function Insights({
     },
     {},
   );
+  const selectableKindCounts = { ...kindCounts };
+  if (view === 'medium' && selectableKindCounts.duplicate == null)
+    selectableKindCounts.duplicate = 0;
   const kindChoices: { value: 'all' | InsightKind; label: string }[] = [
-    { value: 'all', label: `Все типы · ${viewInsights.length}` },
-    ...Object.entries(kindCounts)
+    { value: 'all', label: `Все причины · ${viewInsights.length}` },
+    ...Object.entries(selectableKindCounts)
       .map(([value, count]) => ({
         value: value as InsightKind,
         label: `${INSIGHT_KIND_LABELS[value as InsightKind]} · ${count}`,
       }))
       .sort((left, right) => left.label.localeCompare(right.label, 'ru')),
   ];
-  const effectiveKind = kind === 'all' || kindCounts[kind] ? kind : 'all';
+  const effectiveKind = kindChoices.some((choice) => choice.value === kind)
+    ? kind
+    : 'all';
   const filtered = viewInsights
     .filter(
       (insight) => effectiveKind === 'all' || insight.kind === effectiveKind,
     )
-    .sort((left, right) => {
-      if (view !== 'demand') return 0;
-      return right.score - left.score;
-    });
+    .sort((left, right) => right.score - left.score);
   const displayed = filtered.slice(0, visibleCount);
   const scopes = [
     { value: 'network', label: 'Все подразделения' },
@@ -545,34 +516,32 @@ export default function Insights({
 
         <section className="insight-summary-grid" aria-label="Сводка сигналов">
           <button
-            className={view === 'recent' ? 'active' : ''}
-            onClick={() => changeView(view === 'recent' ? 'all' : 'recent')}
+            className={`summary-high ${view === 'high' ? 'active' : ''}`}
+            onClick={() => changeView(view === 'high' ? 'all' : 'high')}
           >
             <AlertTriangle />
-            <span>Просели или отстают</span>
-            <strong>{report.diagnostics.recentDeclines}</strong>
-            <small>Изменения динамики и проблемы воронки</small>
+            <span>Высокий приоритет</span>
+            <strong>{viewCounts.high}</strong>
+            <small>Сильные подтверждённые отклонения</small>
           </button>
           <button
-            className={view === 'persistent' ? 'active' : ''}
-            onClick={() =>
-              changeView(view === 'persistent' ? 'all' : 'persistent')
-            }
+            className={`summary-medium ${view === 'medium' ? 'active' : ''}`}
+            onClick={() => changeView(view === 'medium' ? 'all' : 'medium')}
           >
-            <TrendingDown />
-            <span>Стабильно слабые</span>
-            <strong>{report.diagnostics.persistentWeak}</strong>
-            <small>Долго без контактов или почти без охвата</small>
+            <Eye />
+            <span>Стоит проверить</span>
+            <strong>{viewCounts.medium}</strong>
+            <small>Умеренные отклонения и возможные дубли</small>
           </button>
           <button
-            className={view === 'opportunity' ? 'active' : ''}
+            className={`summary-opportunity ${view === 'opportunity' ? 'active' : ''}`}
             onClick={() =>
               changeView(view === 'opportunity' ? 'all' : 'opportunity')
             }
           >
             <Lightbulb />
             <span>Сильные примеры</span>
-            <strong>{report.diagnostics.opportunities}</strong>
+            <strong>{viewCounts.opportunity}</strong>
             <small>Лидеры с реальными контактами, не один из одного</small>
           </button>
           <div className="insight-summary-quiet">
@@ -631,7 +600,7 @@ export default function Insights({
             </span>
             <span>
               <b>{report.diagnostics.structuralChecks}</b>
-              структурных проверок
+              возможных дублей
             </span>
             <span>
               <b>{Object.keys(demandByArticle).length}</b>
@@ -684,7 +653,7 @@ export default function Insights({
                 {VIEW_FILTERS.map((item) => (
                   <button
                     key={item.value}
-                    className={view === item.value ? 'active' : ''}
+                    className={`view-${item.value} ${view === item.value ? 'active' : ''}`}
                     onClick={() => changeView(item.value)}
                   >
                     <span>{item.label}</span>
@@ -693,7 +662,7 @@ export default function Insights({
                 ))}
               </div>
               <Picker
-                label="Тип сигнала"
+                label="Причина сигнала"
                 value={effectiveKind}
                 onChange={(value) => changeKind(value as 'all' | InsightKind)}
                 items={kindChoices}
@@ -727,11 +696,15 @@ export default function Insights({
           ) : (
             <div className="insight-empty">
               <ShieldCheck />
-              <h3>Подтверждённых сигналов нет</h3>
+              <h3>
+                {effectiveKind === 'duplicate'
+                  ? 'Возможные дубли не найдены'
+                  : 'Подтверждённых сигналов нет'}
+              </h3>
               <p>
-                Это не утверждение, что все объявления идеальны. Часть
-                объявлений может не иметь достаточной истории или объёма для
-                вывода.
+                {effectiveKind === 'duplicate'
+                  ? 'В выбранном подразделении нет нескольких активных объявлений с одинаковым распознанным артикулом.'
+                  : 'Это не утверждение, что все объявления идеальны. Часть объявлений может не иметь достаточной истории или объёма для вывода.'}
               </p>
               {(view !== 'all' || kind !== 'all') && (
                 <button

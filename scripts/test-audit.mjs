@@ -167,9 +167,10 @@ const insightsHtml = renderToStaticMarkup(
 assert.ok(insightsHtml.includes('Точки роста'));
 assert.ok(insightsHtml.includes('ДОСТАТОЧНОСТЬ ДАННЫХ'));
 assert.ok(insightsHtml.includes('Почему данных достаточно'));
-assert.ok(insightsHtml.includes('Просели или отстают'));
-assert.ok(insightsHtml.includes('Стабильно слабые'));
+assert.ok(insightsHtml.includes('Высокий приоритет'));
+assert.ok(insightsHtml.includes('Стоит проверить'));
 assert.ok(insightsHtml.includes('Сильные примеры'));
+assert.ok(!insightsHtml.includes('Что проверить'));
 assert.ok(insightsHtml.includes('Спрос'));
 assert.ok(insightsHtml.includes('66'));
 assert.ok(insightsHtml.includes('Категория A'));
