@@ -664,7 +664,6 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .insight-coverage { overflow: hidden; }
 .insight-coverage-summary { min-height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 16px; list-style: none; cursor: pointer; }
 .insight-coverage-summary::-webkit-details-marker { display: none; }
-.insight-coverage-summary strong { color: #dedee2; font-size: 13px; font-weight: 600; }
 .insight-coverage-summary > svg { width: 16px; margin-left: auto; color: #888891; transition: transform var(--motion-base) var(--motion-spring); }
 .insight-coverage[open] .insight-coverage-summary { border-bottom: 1px solid #222228; }
 .insight-coverage[open] .insight-coverage-summary > svg { transform: rotate(180deg); }
@@ -698,12 +697,12 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .insight-view-switch button.view-opportunity.active { color: #62dc8e; background: rgba(34, 197, 94, .11); }
 .insight-view-switch button b { min-width: 18px; padding: 2px 5px; color: #a4a4ad; background: #202025; border-radius: 8px; font-size: 10px; font-weight: 650; }
 .insight-view-switch button.active b { color: #fff; background: #3a3a42; }
-.insight-list { display: grid; gap: 8px; padding: 9px; }
+.insight-list { display: grid; gap: 12px; padding: 11px 9px; }
 .insight-load-more { min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #aaaab2; background: #151519; border: 1px solid #2b2b32; border-radius: 9px; font-size: 11px; font-weight: 600; }
 .insight-load-more:hover { color: #fff; background: #1b1b20; border-color: #44444c; }
 .insight-load-more svg { width: 14px; height: 14px; }
 
-.insight-card { position: relative; overflow: hidden; background: #101013; border: 1px solid #26262d; border-radius: 12px; }
+.insight-card { position: relative; overflow: hidden; background: #141418; border: 1px solid #2e2e36; border-radius: 12px; }
 .insight-card::before { position: absolute; inset: 0 auto 0 0; width: 3px; content: ''; background: #8b8b94; }
 .insight-card.tone-high::before { background: #ef3340; }
 .insight-card.tone-medium::before { background: #f59e0b; }

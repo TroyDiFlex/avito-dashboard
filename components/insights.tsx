@@ -515,7 +515,6 @@ export default function Insights({
         <details className="insight-coverage panel">
           <summary className="insight-coverage-summary">
             <span className="eyebrow">ДОСТАТОЧНОСТЬ ДАННЫХ</span>
-            <strong>Почему используются не все объявления?</strong>
             <ChevronDown />
           </summary>
           <div className="insight-coverage-details">
