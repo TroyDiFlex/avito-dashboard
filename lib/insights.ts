@@ -15,6 +15,7 @@ export type InsightKind =
   | 'persistent-no-result'
   | 'portfolio-view-gap'
   | 'portfolio-contact-gap'
+  | 'demand-gap'
   | 'portfolio-winner'
   | 'peer-gap'
   | 'peer-winner'
@@ -29,9 +30,10 @@ export const INSIGHT_KIND_LABELS: Record<InsightKind, string> = {
   'persistent-no-result': 'Долго без результата',
   'portfolio-view-gap': 'Хуже среднего по просмотрам',
   'portfolio-contact-gap': 'Хуже среднего по контактам',
+  'demand-gap': 'Приоритетный товар, слабый результат',
   'portfolio-winner': 'Лидер подразделения',
   'peer-gap': 'Хуже других подразделений',
-  'peer-winner': 'Успешный пример',
+  'peer-winner': 'Лучше того же артикула в сети',
   duplicate: 'Возможный дубль',
 };
 

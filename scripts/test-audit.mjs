@@ -57,7 +57,8 @@ registerHooks({
 });
 
 const { default: Overview } = await import('../components/overview.tsx');
-const { default: Insights } = await import('../components/insights.tsx');
+const { default: Insights, buildDemandGapInsights } =
+  await import('../components/insights.tsx');
 const { demoSnapshot } = await import('../lib/demo.ts');
 const { METRICS } = await import('../lib/model.ts');
 const branches = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
@@ -88,6 +89,33 @@ const snapshot = {
   sources: ['test'],
   rawAdCount: 0,
 };
+const weakInsight = {
+  id: 'weak',
+  kind: 'persistent-no-result',
+  tone: 'high',
+  branch: 'И31',
+  listingId: '123',
+  listingKey: 'И31:123',
+  article: '338004A700',
+  name: 'Деталь 338004A700',
+  title: 'Долго без результата',
+  summary: 'Контактов нет.',
+  current: '0 контактов',
+  comparison: '6 отчётов',
+  sufficiency: 'Истории достаточно.',
+  method: 'Проверено по истории.',
+  facts: [],
+  checks: ['Проверить карточку'],
+  score: 100,
+};
+const priorityInsights = buildDemandGapInsights(
+  [weakInsight],
+  { '338004A700': 10, OTHER1: 100, OTHER2: 200, OTHER3: 300 },
+  { '338004A700': 'A' },
+);
+assert.equal(priorityInsights.length, 1);
+assert.equal(priorityInsights[0].kind, 'demand-gap');
+assert.ok(priorityInsights[0].title.includes('категории A'));
 const html = renderToStaticMarkup(
   createElement(Overview, {
     snapshot,
@@ -132,6 +160,7 @@ const insightsHtml = renderToStaticMarkup(
     availableBranches: branches,
     initialBranch: 'network',
     demandByArticle: { 11128507607: 66 },
+    categoryByArticle: { 11128507607: 'A' },
     onOpenPart() {},
   }),
 );
@@ -143,6 +172,7 @@ assert.ok(insightsHtml.includes('Стабильно слабые'));
 assert.ok(insightsHtml.includes('Сильные примеры'));
 assert.ok(insightsHtml.includes('Спрос'));
 assert.ok(insightsHtml.includes('66'));
+assert.ok(insightsHtml.includes('Категория A'));
 assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
 console.log(
   'Passed: insights, sufficiency explanations and demo signals render.',

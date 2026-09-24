@@ -60,18 +60,21 @@ const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
   { value: 'recent', label: 'Просели или отстают' },
   { value: 'persistent', label: 'Стабильно слабые' },
-  { value: 'demand', label: 'Есть данные спроса' },
+  { value: 'demand', label: 'Приоритетные товары' },
   { value: 'opportunity', label: 'Успешные примеры' },
   { value: 'check', label: 'Проверки' },
 ];
 
-const KIND_CHOICES: { value: 'all' | InsightKind; label: string }[] = [
-  { value: 'all', label: 'Все типы сигналов' },
-  ...Object.entries(INSIGHT_KIND_LABELS).map(([value, label]) => ({
-    value: value as InsightKind,
-    label,
-  })),
-];
+const NEGATIVE_KINDS = new Set<InsightKind>([
+  'reach-drop',
+  'view-rate-drop',
+  'contact-rate-drop',
+  'persistent-low-reach',
+  'persistent-no-result',
+  'portfolio-view-gap',
+  'portfolio-contact-gap',
+  'peer-gap',
+]);
 
 function InfoTip({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -95,7 +98,11 @@ function InfoTip({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function insightIcon(insight: Insight) {
-  if (insight.kind === 'reach-drop' || insight.kind === 'persistent-low-reach')
+  if (
+    insight.kind === 'reach-drop' ||
+    insight.kind === 'persistent-low-reach' ||
+    insight.kind === 'demand-gap'
+  )
     return <TrendingDown />;
   if (
     insight.kind === 'view-rate-drop' ||
@@ -127,6 +134,7 @@ function avitoUrl(id?: string) {
 
 function demandForInsight(
   values: Record<string, number | null>,
+  categories: Record<string, string | null>,
   insight: Insight,
 ) {
   const candidates = [
@@ -136,22 +144,135 @@ function demandForInsight(
   for (const article of candidates) {
     const demand = demandForArticle(values, article);
     if (demand.found)
-      return { ...demand, article: normalizeDemandArticle(article) };
+      return {
+        ...demand,
+        article: normalizeDemandArticle(article),
+        category: categories[normalizeDemandArticle(article)] ?? null,
+      };
   }
-  return { found: false, value: null, article: insight.article };
+  return {
+    found: false,
+    value: null,
+    article: insight.article ?? null,
+    category: null,
+  };
+}
+
+function viewMatchesInsight(view: ViewFilter, insight: Insight): boolean {
+  return (
+    view === 'all' ||
+    (view === 'recent' && RECENT_KINDS.has(insight.kind)) ||
+    (view === 'persistent' && PERSISTENT_KINDS.has(insight.kind)) ||
+    (view === 'demand' && insight.kind === 'demand-gap') ||
+    (view === 'opportunity' && insight.tone === 'opportunity') ||
+    (view === 'check' && insight.tone === 'check')
+  );
+}
+
+export function buildDemandGapInsights(
+  insights: Insight[],
+  demandByArticle: Record<string, number | null>,
+  categoryByArticle: Record<string, string | null>,
+): Insight[] {
+  const demandValues = Object.values(demandByArticle)
+    .filter((value): value is number => value != null)
+    .sort((left, right) => left - right);
+  const highDemandThreshold = demandValues.length
+    ? demandValues[Math.floor((demandValues.length - 1) * 0.75)]
+    : null;
+  const strongestByListing = new Map<
+    string,
+    {
+      insight: Insight;
+      demand: number | null;
+      article: string | null;
+      category: string | null;
+    }
+  >();
+
+  insights.forEach((insight) => {
+    if (!NEGATIVE_KINDS.has(insight.kind)) return;
+    const product = demandForInsight(
+      demandByArticle,
+      categoryByArticle,
+      insight,
+    );
+    const categoryPriority = product.category
+      ? ({ A: 3, B: 2, C: 1 }[product.category] ?? 0)
+      : 0;
+    const highDemand =
+      product.value != null &&
+      highDemandThreshold != null &&
+      product.value >= highDemandThreshold;
+    if (!highDemand && categoryPriority === 0) return;
+    const key =
+      insight.listingKey ??
+      `${insight.branch}:${insight.listingId ?? insight.name}`;
+    const previous = strongestByListing.get(key);
+    if (!previous || insight.score > previous.insight.score) {
+      strongestByListing.set(key, {
+        insight,
+        demand: product.value,
+        article: product.article,
+        category: product.category,
+      });
+    }
+  });
+
+  return [...strongestByListing.entries()].map(
+    ([listingKey, { insight, demand, article, category }]) => {
+      const demandText =
+        demand == null ? null : `спрос ${demand.toLocaleString('ru-RU')}`;
+      const categoryText = category ? `категория ${category}` : null;
+      const priorityText = [categoryText, demandText]
+        .filter(Boolean)
+        .join(' · ');
+      const categoryBonus = category
+        ? ({ A: 50, B: 35, C: 20 }[category] ?? 0)
+        : 0;
+      return {
+        ...insight,
+        id: `demand-gap:${listingKey}`,
+        kind: 'demand-gap' as const,
+        tone: 'high' as const,
+        article,
+        title: `${categoryText ? `Товар категории ${category}` : 'Высокий спрос'}, а результат объявления слабый`,
+        summary: `${priorityText} повышает важность объявления. ${insight.summary}`,
+        comparison: `${priorityText}; ${insight.comparison}`,
+        sufficiency: `${insight.sufficiency} Приоритет товара взят из загруженной таблицы.`,
+        method: `Спрос и категория используются для приоритизации, а не как доказательство причины. Слабый результат подтверждён отдельно: ${insight.method}`,
+        checks: Array.from(
+          new Set([
+            'Проверить соответствие артикула и объявления',
+            ...insight.checks,
+          ]),
+        ),
+        score:
+          insight.score +
+          categoryBonus +
+          (demand != null &&
+          highDemandThreshold != null &&
+          demand >= highDemandThreshold
+            ? 35
+            : 0),
+      };
+    },
+  );
 }
 
 function InsightCard({
   insight,
   onOpenPart,
   demandByArticle,
+  categoryByArticle,
 }: {
   insight: Insight;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   demandByArticle: Record<string, number | null>;
+  categoryByArticle: Record<string, string | null>;
 }) {
   const url = avitoUrl(insight.listingId);
-  const demand = demandForInsight(demandByArticle, insight);
+  const demand = demandForInsight(demandByArticle, categoryByArticle, insight);
   const displayedArticle = demand.found ? demand.article : insight.article;
   return (
     <article className={`insight-card tone-${insight.tone}`}>
@@ -172,6 +293,14 @@ function InsightCard({
                   ? '—'
                   : demand.value.toLocaleString('ru-RU')}
               </span>
+            )}
+            {demand.category && (
+              <span className={`insight-category category-${demand.category}`}>
+                Категория {demand.category}
+              </span>
+            )}
+            {insight.listingId && (
+              <span className="insight-listing-id">№ {insight.listingId}</span>
             )}
           </div>
           <div className="insight-title-row">
@@ -208,9 +337,6 @@ function InsightCard({
               )}
             </div>
           </div>
-          {insight.listingId && (
-            <span className="insight-listing-id">№ {insight.listingId}</span>
-          )}
         </div>
       </header>
 
@@ -289,6 +415,7 @@ export default function Insights({
   initialBranch,
   onOpenPart,
   demandByArticle,
+  categoryByArticle,
 }: {
   snapshot: Snapshot;
   from: string;
@@ -297,6 +424,7 @@ export default function Insights({
   initialBranch: string;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   demandByArticle: Record<string, number | null>;
+  categoryByArticle: Record<string, string | null>;
 }) {
   const [scope, setScope] = useState(
     availableBranches.includes(initialBranch) ? initialBranch : 'network',
@@ -306,6 +434,7 @@ export default function Insights({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const changeView = (next: ViewFilter) => {
     setView(next);
+    setKind('all');
     setVisibleCount(PAGE_SIZE);
   };
   const changeKind = (next: 'all' | InsightKind) => {
@@ -330,23 +459,53 @@ export default function Insights({
       }),
     [availableBranches, effectiveScope, from, snapshot, to],
   );
-  const filtered = report.insights
-    .filter((insight) => {
-      const viewMatches =
-        view === 'all' ||
-        (view === 'recent' && RECENT_KINDS.has(insight.kind)) ||
-        (view === 'persistent' && PERSISTENT_KINDS.has(insight.kind)) ||
-        (view === 'demand' &&
-          demandForInsight(demandByArticle, insight).found) ||
-        (view === 'opportunity' && insight.tone === 'opportunity') ||
-        (view === 'check' && insight.tone === 'check');
-      return viewMatches && (kind === 'all' || insight.kind === kind);
-    })
+  const demandGapInsights = useMemo(
+    () =>
+      buildDemandGapInsights(
+        report.insights,
+        demandByArticle,
+        categoryByArticle,
+      ),
+    [categoryByArticle, demandByArticle, report.insights],
+  );
+  const allInsights = useMemo(
+    () => [...report.insights, ...demandGapInsights],
+    [demandGapInsights, report.insights],
+  );
+  const viewCounts = Object.fromEntries(
+    VIEW_FILTERS.map((item) => [
+      item.value,
+      allInsights.filter((insight) => viewMatchesInsight(item.value, insight))
+        .length,
+    ]),
+  ) as Record<ViewFilter, number>;
+  const viewInsights = allInsights.filter((insight) =>
+    viewMatchesInsight(view, insight),
+  );
+  const kindCounts = viewInsights.reduce<Partial<Record<InsightKind, number>>>(
+    (counts, insight) => {
+      counts[insight.kind] = (counts[insight.kind] ?? 0) + 1;
+      return counts;
+    },
+    {},
+  );
+  const kindChoices: { value: 'all' | InsightKind; label: string }[] = [
+    { value: 'all', label: `Все типы · ${viewInsights.length}` },
+    ...Object.entries(kindCounts)
+      .map(([value, count]) => ({
+        value: value as InsightKind,
+        label: `${INSIGHT_KIND_LABELS[value as InsightKind]} · ${count}`,
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label, 'ru')),
+  ];
+  const effectiveKind = kind === 'all' || kindCounts[kind] ? kind : 'all';
+  const filtered = viewInsights
+    .filter(
+      (insight) => effectiveKind === 'all' || insight.kind === effectiveKind,
+    )
     .sort((left, right) => {
       if (view !== 'demand') return 0;
-      const leftDemand = demandForInsight(demandByArticle, left).value;
-      const rightDemand = demandForInsight(demandByArticle, right).value;
-      return (rightDemand ?? -1) - (leftDemand ?? -1);
+      return right.score - left.score;
     });
   const displayed = filtered.slice(0, visibleCount);
   const scopes = [
@@ -476,7 +635,11 @@ export default function Insights({
             </span>
             <span>
               <b>{Object.keys(demandByArticle).length}</b>
-              артикулов в аналитике спроса
+              артикулов в аналитике товаров
+            </span>
+            <span>
+              <b>{Object.values(categoryByArticle).filter(Boolean).length}</b>
+              с категорией товара
             </span>
           </div>
           <details className="insight-methodology">
@@ -524,15 +687,16 @@ export default function Insights({
                     className={view === item.value ? 'active' : ''}
                     onClick={() => changeView(item.value)}
                   >
-                    {item.label}
+                    <span>{item.label}</span>
+                    <b>{viewCounts[item.value]}</b>
                   </button>
                 ))}
               </div>
               <Picker
                 label="Тип сигнала"
-                value={kind}
+                value={effectiveKind}
                 onChange={(value) => changeKind(value as 'all' | InsightKind)}
-                items={KIND_CHOICES}
+                items={kindChoices}
               />
             </div>
           </div>
@@ -544,6 +708,7 @@ export default function Insights({
                   insight={insight}
                   onOpenPart={onOpenPart}
                   demandByArticle={demandByArticle}
+                  categoryByArticle={categoryByArticle}
                 />
               ))}
               {displayed.length < filtered.length && (

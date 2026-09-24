@@ -591,10 +591,10 @@ export default function Dashboard() {
     try {
       localStorage.setItem('pik-demand-analysis', demandText);
       setDemandNotice(
-        `Сохранено: ${demandAnalysis.recognized} артикулов, ${demandAnalysis.withValue} со значением спроса.`,
+        `Сохранено: ${demandAnalysis.recognized} артикулов, ${demandAnalysis.withValue} со спросом, ${demandAnalysis.withCategory} с категорией.`,
       );
     } catch {
-      setDemandNotice('Не удалось сохранить аналитику спроса на устройстве.');
+      setDemandNotice('Не удалось сохранить аналитику товаров на устройстве.');
     }
   }
 
@@ -728,6 +728,7 @@ export default function Dashboard() {
                   initialBranch={branch}
                   availableBranches={visibleBranches}
                   demandByArticle={demandAnalysis.values}
+                  categoryByArticle={demandAnalysis.categories}
                   onOpenPart={(ad) => openPart(ad, 'insights')}
                 />
               )}
@@ -766,7 +767,7 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle>Настройки</DialogTitle>
             <DialogDescription>
-              Подразделения, аналитика спроса и подключение таблиц.
+              Подразделения, аналитика товаров и подключение таблиц.
             </DialogDescription>
           </DialogHeader>
           <section className="settings-section">
@@ -796,14 +797,14 @@ export default function Dashboard() {
           </section>
           <section className="settings-section demand-settings">
             <div className="settings-section-heading">
-              <h3>Аналитика спроса</h3>
+              <h3>Аналитика спроса и категорий</h3>
               <p>
-                Вставьте строки из таблицы: артикул, затем значение спроса через
-                Tab. Суффикс VRN удаляется автоматически.
+                Вставьте артикул, спрос и категорию через Tab или целую
+                Markdown-таблицу. Суффикс VRN удаляется автоматически.
               </p>
             </div>
             <label htmlFor="demand-analysis">
-              <span>Артикул и спрос</span>
+              <span>Артикул, спрос и категория</span>
               <textarea
                 id="demand-analysis"
                 value={demandText}
@@ -813,7 +814,7 @@ export default function Dashboard() {
                 }}
                 rows={9}
                 spellCheck={false}
-                placeholder={'03L115389HVRN\t66\n11428596283VRN\t569'}
+                placeholder={'03L115389HVRN\t66\tA\n11428596283VRN\t569\tC'}
               />
             </label>
             <div className="demand-import-summary">
@@ -823,14 +824,20 @@ export default function Dashboard() {
               <span>
                 <b>{demandAnalysis.withValue}</b> со спросом
               </span>
+              <span>
+                <b>{demandAnalysis.withCategory}</b> с категорией
+              </span>
               {demandAnalysis.withoutValue > 0 && (
                 <span>
                   <b>{demandAnalysis.withoutValue}</b> без значения
                 </span>
               )}
               {demandAnalysis.invalid > 0 && (
-                <span className="warning">
-                  <b>{demandAnalysis.invalid}</b> не распознано
+                <span
+                  className="warning"
+                  title="Пропускаются строки без корректного артикула или числового значения спроса."
+                >
+                  <b>{demandAnalysis.invalid}</b> строк пропущено
                 </span>
               )}
             </div>
@@ -841,7 +848,7 @@ export default function Dashboard() {
             )}
             <Button type="button" onClick={saveDemandAnalysis}>
               <Check />
-              Сохранить аналитику спроса
+              Сохранить аналитику товаров
             </Button>
           </section>
           <section className="settings-section connection-settings">
