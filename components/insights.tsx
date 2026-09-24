@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowRight,
   ChartNoAxesCombined,
@@ -15,6 +15,11 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { Picker } from '@/components/analytics-ui';
+import {
+  readBrowserPreference,
+  replaceUrlParameters,
+  saveBrowserPreference,
+} from '@/lib/browser-preferences';
 import {
   Tooltip,
   TooltipContent,
@@ -46,7 +51,9 @@ const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'opportunity', label: 'Сильные примеры' },
 ];
 
-function initialUrlFilters(initialBranch: string, availableBranches: string[]) {
+const INSIGHTS_FILTERS_KEY = 'pik-insights-filters';
+
+function initialFilters(initialBranch: string, availableBranches: string[]) {
   const fallbackScope = availableBranches.includes(initialBranch)
     ? initialBranch
     : 'network';
@@ -57,42 +64,40 @@ function initialUrlFilters(initialBranch: string, availableBranches: string[]) {
     visibleCount: PAGE_SIZE,
   };
   if (typeof window === 'undefined') return fallback;
+  const stored = readBrowserPreference(INSIGHTS_FILTERS_KEY);
   const params = new URLSearchParams(window.location.search);
-  const savedScope = params.get('scope');
-  const savedView = params.get('priority');
-  const savedKind = params.get('reason');
+  const urlScope = params.get('scope');
+  const urlView = params.get('priority');
+  const urlKind = params.get('reason');
   const savedCount = params.get('shown');
   const parsedCount =
     savedCount && /^\d+$/.test(savedCount) ? Number(savedCount) : PAGE_SIZE;
+  const validScope = (value: unknown): value is string =>
+    value === 'network' ||
+    (typeof value === 'string' && availableBranches.includes(value));
+  const validView = (value: unknown): value is ViewFilter =>
+    VIEW_FILTERS.some((item) => item.value === value);
+  const validKind = (value: unknown): value is 'all' | InsightKind =>
+    value === 'all' ||
+    (typeof value === 'string' && Object.hasOwn(INSIGHT_KIND_LABELS, value));
   return {
-    scope:
-      savedScope === 'network' ||
-      (savedScope != null && availableBranches.includes(savedScope))
-        ? savedScope
+    scope: validScope(urlScope)
+      ? urlScope
+      : validScope(stored.scope)
+        ? stored.scope
         : fallbackScope,
-    view: VIEW_FILTERS.some((item) => item.value === savedView)
-      ? (savedView as ViewFilter)
-      : 'all',
-    kind:
-      savedKind === 'all' ||
-      (savedKind != null && Object.hasOwn(INSIGHT_KIND_LABELS, savedKind))
-        ? (savedKind as 'all' | InsightKind)
+    view: validView(urlView)
+      ? urlView
+      : validView(stored.view)
+        ? stored.view
+        : 'all',
+    kind: validKind(urlKind)
+      ? urlKind
+      : validKind(stored.kind)
+        ? stored.kind
         : 'all',
     visibleCount: Math.max(PAGE_SIZE, Math.min(parsedCount, 6000)),
   };
-}
-
-function replaceUrlFilters(values: Record<string, string>) {
-  if (typeof window === 'undefined') return;
-  const url = new URL(window.location.href);
-  Object.entries(values).forEach(([key, value]) =>
-    url.searchParams.set(key, value),
-  );
-  window.history.replaceState(
-    window.history.state,
-    '',
-    `${url.pathname}${url.search}${url.hash}`,
-  );
 }
 
 const NEGATIVE_KINDS = new Set<InsightKind>([
@@ -492,7 +497,7 @@ export default function Insights({
   categoryByArticle: Record<string, string | null>;
 }) {
   const [initial] = useState(() =>
-    initialUrlFilters(initialBranch, availableBranches),
+    initialFilters(initialBranch, availableBranches),
   );
   const [scope, setScope] = useState(initial.scope);
   const [view, setView] = useState<ViewFilter>(initial.view);
@@ -502,7 +507,7 @@ export default function Insights({
     setView(next);
     setKind('all');
     setVisibleCount(PAGE_SIZE);
-    replaceUrlFilters({
+    replaceUrlParameters({
       priority: next,
       reason: 'all',
       shown: String(PAGE_SIZE),
@@ -511,23 +516,23 @@ export default function Insights({
   const changeKind = (next: 'all' | InsightKind) => {
     setKind(next);
     setVisibleCount(PAGE_SIZE);
-    replaceUrlFilters({ reason: next, shown: String(PAGE_SIZE) });
+    replaceUrlParameters({ reason: next, shown: String(PAGE_SIZE) });
   };
   const changeScope = (next: string) => {
     setScope(next);
     setVisibleCount(PAGE_SIZE);
-    replaceUrlFilters({ scope: next, shown: String(PAGE_SIZE) });
+    replaceUrlParameters({ scope: next, shown: String(PAGE_SIZE) });
   };
   const showMore = () => {
     const next = visibleCount + PAGE_SIZE;
     setVisibleCount(next);
-    replaceUrlFilters({ shown: String(next) });
+    replaceUrlParameters({ shown: String(next) });
   };
   const resetFilters = () => {
     setView('all');
     setKind('all');
     setVisibleCount(PAGE_SIZE);
-    replaceUrlFilters({
+    replaceUrlParameters({
       priority: 'all',
       reason: 'all',
       shown: String(PAGE_SIZE),
@@ -537,6 +542,21 @@ export default function Insights({
     scope === 'network' || availableBranches.includes(scope)
       ? scope
       : 'network';
+
+  useEffect(() => {
+    saveBrowserPreference(INSIGHTS_FILTERS_KEY, {
+      scope: effectiveScope,
+      view,
+      kind,
+    });
+    replaceUrlParameters({
+      scope: effectiveScope,
+      priority: view,
+      reason: kind,
+      shown: String(visibleCount),
+    });
+  }, [effectiveScope, kind, view, visibleCount]);
+
   const report = useMemo(
     () =>
       buildInsightReport(snapshot, {

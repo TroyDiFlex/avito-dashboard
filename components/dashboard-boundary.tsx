@@ -24,6 +24,9 @@ export default class DashboardBoundary extends Component<
               try {
                 localStorage.removeItem('pik-filters');
                 localStorage.removeItem('pik-comparison');
+                localStorage.removeItem('pik-ads-filters');
+                localStorage.removeItem('pik-parts-filters');
+                localStorage.removeItem('pik-insights-filters');
               } catch {
                 /* Optional storage. */
               }

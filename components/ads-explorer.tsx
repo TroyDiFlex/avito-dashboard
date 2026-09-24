@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,6 +13,11 @@ import {
 } from 'lucide-react';
 import { Chart, Picker, Spark } from '@/components/analytics-ui';
 import { Input } from '@/components/ui/input';
+import {
+  readBrowserPreference,
+  replaceUrlParameters,
+  saveBrowserPreference,
+} from '@/lib/browser-preferences';
 import {
   AD_METRICS,
   BRANCH_COLORS,
@@ -29,6 +34,7 @@ import {
 const TOP_LIMIT = 10;
 const CHART_LIMIT = 20;
 const PAGE_SIZE = 50;
+const ADS_FILTERS_KEY = 'pik-ads-filters';
 const RANK_METRICS: Metric[] = [
   'contacts',
   'views',
@@ -45,6 +51,36 @@ const TABLE_METRICS: Metric[] = [
   'favorites',
   'spend',
 ];
+
+function isRankMetric(value: unknown): value is Metric {
+  return typeof value === 'string' && RANK_METRICS.includes(value as Metric);
+}
+
+function initialAdsFilters(initialBranch: string, availableBranches: string[]) {
+  const fallbackBranch = availableBranches.includes(initialBranch)
+    ? initialBranch
+    : (availableBranches[0] ?? '');
+  if (typeof window === 'undefined') {
+    return { branch: fallbackBranch, rankMetric: 'contacts' as Metric };
+  }
+  const stored = readBrowserPreference(ADS_FILTERS_KEY);
+  const params = new URLSearchParams(window.location.search);
+  const urlBranch = params.get('adsBranch');
+  const urlMetric = params.get('adsMetric');
+  const storedBranch = typeof stored.branch === 'string' ? stored.branch : null;
+  return {
+    branch: availableBranches.includes(urlBranch ?? '')
+      ? urlBranch!
+      : availableBranches.includes(storedBranch ?? '')
+        ? storedBranch!
+        : fallbackBranch,
+    rankMetric: isRankMetric(urlMetric)
+      ? urlMetric
+      : isRankMetric(stored.rankMetric)
+        ? stored.rankMetric
+        : ('contacts' as Metric),
+  };
+}
 const LINE_COLORS = [
   '#ef3340',
   '#38bdf8',
@@ -146,18 +182,29 @@ export default function AdsExplorer({
   availableBranches: string[];
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
 }) {
-  const [branch, setBranch] = useState(
-    availableBranches.includes(initialBranch)
-      ? initialBranch
-      : (availableBranches[0] ?? ''),
+  const [initial] = useState(() =>
+    initialAdsFilters(initialBranch, availableBranches),
   );
-  const [rankMetric, setRankMetric] = useState<Metric>('contacts');
+  const [branch, setBranch] = useState(initial.branch);
+  const [rankMetric, setRankMetric] = useState<Metric>(initial.rankMetric);
   const [search, setSearch] = useState('');
   const [selectedKeys, setSelectedKeys] = useState<string[] | null>(null);
   const [page, setPage] = useState(1);
   const effectiveBranch = availableBranches.includes(branch)
     ? branch
     : (availableBranches[0] ?? '');
+
+  useEffect(() => {
+    saveBrowserPreference(ADS_FILTERS_KEY, {
+      branch: effectiveBranch,
+      rankMetric,
+    });
+    replaceUrlParameters({
+      adsBranch: effectiveBranch,
+      adsMetric: rankMetric,
+    });
+  }, [effectiveBranch, rankMetric]);
+
   const listings = useMemo(
     () => buildListings(snapshot, effectiveBranch, from, to, rankMetric),
     [snapshot, effectiveBranch, from, to, rankMetric],

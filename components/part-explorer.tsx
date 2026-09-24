@@ -1,9 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Search } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
 import { Input } from '@/components/ui/input';
+import {
+  readBrowserPreference,
+  replaceUrlParameters,
+  saveBrowserPreference,
+} from '@/lib/browser-preferences';
 import {
   AD_METRICS,
   BRANCH_COLORS,
@@ -17,10 +22,45 @@ import {
   type Snapshot,
 } from '@/lib/model';
 import { adKey, extractArticle } from '@/lib/explore';
+
+const PARTS_FILTERS_KEY = 'pik-parts-filters';
 const metricChoices = AD_METRICS.map((value) => ({
   value,
   label: METRICS[value].label,
 }));
+
+function isAdMetric(value: unknown): value is Metric {
+  return typeof value === 'string' && AD_METRICS.includes(value as Metric);
+}
+
+function initialPartFilters(initialScope: string, availableBranches: string[]) {
+  const fallbackScope =
+    initialScope === 'network' || availableBranches.includes(initialScope)
+      ? initialScope
+      : 'network';
+  if (typeof window === 'undefined') {
+    return { scope: fallbackScope, metric: 'contacts' as Metric };
+  }
+  const stored = readBrowserPreference(PARTS_FILTERS_KEY);
+  const params = new URLSearchParams(window.location.search);
+  const urlScope = params.get('partsScope');
+  const urlMetric = params.get('partsMetric');
+  const storedScope = typeof stored.scope === 'string' ? stored.scope : null;
+  const validScope = (value: string | null) =>
+    value === 'network' || availableBranches.includes(value ?? '');
+  return {
+    scope: validScope(urlScope)
+      ? urlScope!
+      : validScope(storedScope)
+        ? storedScope!
+        : fallbackScope,
+    metric: isAdMetric(urlMetric)
+      ? urlMetric
+      : isAdMetric(stored.metric)
+        ? stored.metric
+        : ('contacts' as Metric),
+  };
+}
 
 type Listing = {
   key: string;
@@ -128,25 +168,39 @@ export default function PartExplorer({
     ],
     [availableBranches],
   );
-  const [scope, setScope] = useState(
-    initialScope === 'network' || availableBranches.includes(initialScope)
-      ? initialScope
-      : 'network',
+  const [initial] = useState(() =>
+    initialPartFilters(initialScope, availableBranches),
   );
-  const [metric, setMetric] = useState<Metric>('contacts');
+  const [scope, setScope] = useState(initial.scope);
+  const [metric, setMetric] = useState<Metric>(initial.metric);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string | null>(() =>
     initialAd
-      ? allParts.find((part) =>
+      ? (allParts.find((part) =>
           part.listings.some(
             (listing) =>
-              listing.latest.branch === initialAd.branch && listing.latest.id === initialAd.id,
+              listing.latest.branch === initialAd.branch &&
+              listing.latest.id === initialAd.id,
           ),
-        )?.key ?? null
+        )?.key ?? null)
       : null,
   );
   const effectiveScope =
-    scope === 'network' || availableBranches.includes(scope) ? scope : 'network';
+    scope === 'network' || availableBranches.includes(scope)
+      ? scope
+      : 'network';
+
+  useEffect(() => {
+    saveBrowserPreference(PARTS_FILTERS_KEY, {
+      scope: effectiveScope,
+      metric,
+    });
+    replaceUrlParameters({
+      partsScope: effectiveScope,
+      partsMetric: metric,
+    });
+  }, [effectiveScope, metric]);
+
   const branches = useMemo(
     () => (effectiveScope === 'network' ? availableBranches : [effectiveScope]),
     [availableBranches, effectiveScope],
@@ -169,12 +223,17 @@ export default function PartExplorer({
           const haystack = `${part.article ?? ''} ${part.name} ${part.listings
             .map((listing) => `${listing.latest.id} ${listing.latest.branch}`)
             .join(' ')}`.toLowerCase();
-          return part.listings.length > 0 && haystack.includes(search.trim().toLowerCase());
+          return (
+            part.listings.length > 0 &&
+            haystack.includes(search.trim().toLowerCase())
+          );
         })
         .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity)),
     [allParts, branches, from, to, metric, search],
   );
-  const selectedPart = selected ? parts.find((part) => part.key === selected) : null;
+  const selectedPart = selected
+    ? allParts.find((part) => part.key === selected)
+    : null;
 
   if (selectedPart) {
     return (
@@ -207,7 +266,12 @@ export default function PartExplorer({
             aria-label="Поиск объявлений"
           />
         </div>
-        <Picker label="Подразделение" value={effectiveScope} onChange={setScope} items={scopes} />
+        <Picker
+          label="Подразделение"
+          value={effectiveScope}
+          onChange={setScope}
+          items={scopes}
+        />
         <Picker
           label="Показатель"
           value={metric}
@@ -229,23 +293,38 @@ export default function PartExplorer({
             </thead>
             <tbody>
               {parts.map((part) => {
-                const accounts = [...new Set(part.listings.map((listing) => listing.latest.branch))];
+                const accounts = [
+                  ...new Set(
+                    part.listings.map((listing) => listing.latest.branch),
+                  ),
+                ];
                 return (
                   <tr key={part.key} onClick={() => setSelected(part.key)}>
                     <td>
                       <strong>{part.name}</strong>
-                      <small>{part.article ? `Артикул ${part.article}` : `№ ${part.listings[0].latest.id}`}</small>
+                      <small>
+                        {part.article
+                          ? `Артикул ${part.article}`
+                          : `№ ${part.listings[0].latest.id}`}
+                      </small>
                     </td>
                     <td>
                       <div className="account-list">
                         {accounts.map((account) => (
-                          <span key={account}><i style={{ background: BRANCH_COLORS[account] }} />{account}</span>
+                          <span key={account}>
+                            <i style={{ background: BRANCH_COLORS[account] }} />
+                            {account}
+                          </span>
                         ))}
                       </div>
                     </td>
                     <td>{part.listings.length}</td>
-                    <td><b>{format(part.value, metric)}</b></td>
-                    <td><ArrowRight /></td>
+                    <td>
+                      <b>{format(part.value, metric)}</b>
+                    </td>
+                    <td>
+                      <ArrowRight />
+                    </td>
                   </tr>
                 );
               })}
@@ -271,33 +350,54 @@ function PartDetail({
 }) {
   const [metric, setMetric] = useState<Metric>('contacts');
   const accounts = useMemo(() => accountsFor(part, from, to), [part, from, to]);
-  const dates = [...new Set(accounts.flatMap((account) => account.rows.map((row) => row.end)))].sort();
+  const dates = [
+    ...new Set(
+      accounts.flatMap((account) => account.rows.map((row) => row.end)),
+    ),
+  ].sort();
   const chartData = dates.map((date) => {
     const row: Record<string, unknown> = { date };
     accounts.forEach((account) => {
-      row[account.branch] = account.rows.find((item) => item.end === date)?.metrics[metric] ?? null;
+      row[account.branch] =
+        account.rows.find((item) => item.end === date)?.metrics[metric] ?? null;
     });
     return row;
   });
   return (
     <div className="part-detail">
-      <button className="back-button" onClick={onBack}><ArrowLeft />Все запчасти</button>
+      <button className="back-button" onClick={onBack}>
+        <ArrowLeft />
+        Все запчасти
+      </button>
       <section className="part-heading">
         <div>
-          <span className="eyebrow">{part.article ? `АРТИКУЛ ${part.article}` : 'ОБЪЯВЛЕНИЕ'}</span>
+          <span className="eyebrow">
+            {part.article ? `АРТИКУЛ ${part.article}` : 'ОБЪЯВЛЕНИЕ'}
+          </span>
           <h2>{part.name}</h2>
           <p>{part.category}</p>
         </div>
-        <span>{accounts.length} подразделений · {part.listings.length} объявлений</span>
+        <span>
+          {accounts.length} подразделений · {part.listings.length} объявлений
+        </span>
       </section>
 
       <section className="listing-links">
         {accounts.map((account) => (
           <article key={account.branch}>
-            <header><i style={{ background: BRANCH_COLORS[account.branch] }} /><strong>{account.branch}</strong></header>
+            <header>
+              <i style={{ background: BRANCH_COLORS[account.branch] }} />
+              <strong>{account.branch}</strong>
+            </header>
             {account.listings.map((listing) => (
-              <a key={listing.key} href={avitoUrl(listing.latest.id)} target="_blank" rel="noreferrer">
-                <span>Объявление № {listing.latest.id}</span><ExternalLink />
+              <a
+                key={listing.key}
+                href={avitoUrl(listing.latest.id)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>Объявление № {listing.latest.id}</span>
+                <ExternalLink />
               </a>
             ))}
           </article>
@@ -306,7 +406,10 @@ function PartDetail({
 
       <section className="part-chart panel">
         <div className="section-heading">
-          <div><span className="eyebrow">ВСЕ ПОДРАЗДЕЛЕНИЯ</span><h2>{METRICS[metric].label}</h2></div>
+          <div>
+            <span className="eyebrow">ВСЕ ПОДРАЗДЕЛЕНИЯ</span>
+            <h2>{METRICS[metric].label}</h2>
+          </div>
           <Picker
             label="Показатель графика"
             value={metric}
@@ -330,10 +433,19 @@ function PartDetail({
           const latest = account.rows.at(-1);
           return (
             <article key={account.branch}>
-              <header><i style={{ background: BRANCH_COLORS[account.branch] }} /><h3>{account.branch}</h3><span>{latest ? shortDate(latest.end) : '—'}</span></header>
+              <header>
+                <i style={{ background: BRANCH_COLORS[account.branch] }} />
+                <h3>{account.branch}</h3>
+                <span>{latest ? shortDate(latest.end) : '—'}</span>
+              </header>
               <div>
-                {(['views', 'contacts', 'contactRate', 'spend'] as Metric[]).map((item) => (
-                  <span key={item}><small>{METRICS[item].label}</small><strong>{format(latest?.metrics[item], item)}</strong></span>
+                {(
+                  ['views', 'contacts', 'contactRate', 'spend'] as Metric[]
+                ).map((item) => (
+                  <span key={item}>
+                    <small>{METRICS[item].label}</small>
+                    <strong>{format(latest?.metrics[item], item)}</strong>
+                  </span>
                 ))}
               </div>
             </article>
