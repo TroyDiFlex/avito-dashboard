@@ -212,8 +212,10 @@ export function buildDemandGapInsights(
   return [...strongestByListing.entries()].map(
     ([listingKey, { insight, demand, article, category }]) => {
       const demandText =
-        demand == null ? null : `спрос ${demand.toLocaleString('ru-RU')}`;
-      const categoryText = category ? `категория ${category}` : null;
+        demand == null
+          ? null
+          : `${category ? 'спрос' : 'Спрос'} ${demand.toLocaleString('ru-RU')}`;
+      const categoryText = category ? `Категория ${category}` : null;
       const priorityText = [categoryText, demandText]
         .filter(Boolean)
         .join(' · ');

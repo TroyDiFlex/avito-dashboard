@@ -211,12 +211,23 @@ const portfolioViewGap = [
     ),
   ),
 ];
+const portfolioViewGapInsight = report(portfolioViewGap).insights.find(
+  (insight) =>
+    insight.kind === 'portfolio-view-gap' && insight.listingId === '40',
+);
 assert.ok(
-  report(portfolioViewGap).insights.some(
-    (insight) =>
-      insight.kind === 'portfolio-view-gap' && insight.listingId === '40',
-  ),
+  portfolioViewGapInsight,
   'A repeatedly weak view rate with enough impressions must be compared with the branch portfolio.',
+);
+assert.match(
+  portfolioViewGapInsight.current,
+  /^.+ просмотров из .+ показов · /,
+  'The actual result must name views and impressions.',
+);
+assert.match(
+  portfolioViewGapInsight.comparison,
+  /% просмотров от показов$/,
+  'The comparison rate must explain that it is views divided by impressions.',
 );
 
 const peerRows = ['И31', 'Х7', 'Автово'].flatMap((branch, branchIndex) =>
