@@ -46,6 +46,55 @@ const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'opportunity', label: 'Сильные примеры' },
 ];
 
+function initialUrlFilters(initialBranch: string, availableBranches: string[]) {
+  const fallbackScope = availableBranches.includes(initialBranch)
+    ? initialBranch
+    : 'network';
+  const fallback = {
+    scope: fallbackScope,
+    view: 'all' as ViewFilter,
+    kind: 'all' as 'all' | InsightKind,
+    visibleCount: PAGE_SIZE,
+  };
+  if (typeof window === 'undefined') return fallback;
+  const params = new URLSearchParams(window.location.search);
+  const savedScope = params.get('scope');
+  const savedView = params.get('priority');
+  const savedKind = params.get('reason');
+  const savedCount = params.get('shown');
+  const parsedCount =
+    savedCount && /^\d+$/.test(savedCount) ? Number(savedCount) : PAGE_SIZE;
+  return {
+    scope:
+      savedScope === 'network' ||
+      (savedScope != null && availableBranches.includes(savedScope))
+        ? savedScope
+        : fallbackScope,
+    view: VIEW_FILTERS.some((item) => item.value === savedView)
+      ? (savedView as ViewFilter)
+      : 'all',
+    kind:
+      savedKind === 'all' ||
+      (savedKind != null && Object.hasOwn(INSIGHT_KIND_LABELS, savedKind))
+        ? (savedKind as 'all' | InsightKind)
+        : 'all',
+    visibleCount: Math.max(PAGE_SIZE, Math.min(parsedCount, 6000)),
+  };
+}
+
+function replaceUrlFilters(values: Record<string, string>) {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  Object.entries(values).forEach(([key, value]) =>
+    url.searchParams.set(key, value),
+  );
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
 const NEGATIVE_KINDS = new Set<InsightKind>([
   'reach-drop',
   'view-rate-drop',
@@ -55,6 +104,43 @@ const NEGATIVE_KINDS = new Set<InsightKind>([
   'portfolio-view-gap',
   'portfolio-contact-gap',
   'peer-gap',
+]);
+
+const PRIORITY_KIND_BY_SOURCE: Partial<Record<InsightKind, InsightKind>> = {
+  'reach-drop': 'priority-reach-drop',
+  'view-rate-drop': 'priority-view-rate-drop',
+  'contact-rate-drop': 'priority-contact-rate-drop',
+  'persistent-low-reach': 'priority-persistent-low-reach',
+  'persistent-no-result': 'priority-persistent-no-result',
+  'portfolio-view-gap': 'priority-portfolio-view-gap',
+  'portfolio-contact-gap': 'priority-portfolio-contact-gap',
+  'peer-gap': 'priority-peer-gap',
+};
+
+const PRIORITY_RESULT_BY_SOURCE: Partial<Record<InsightKind, string>> = {
+  'reach-drop': 'охват недавно снизился',
+  'view-rate-drop': 'доля просмотров недавно снизилась',
+  'contact-rate-drop': 'доля контактов недавно снизилась',
+  'persistent-low-reach': 'охват стабильно низкий',
+  'persistent-no-result': 'долго нет контактов',
+  'portfolio-view-gap': 'просмотры хуже среднего по подразделению',
+  'portfolio-contact-gap': 'контакты хуже среднего по подразделению',
+  'peer-gap': 'результат хуже других подразделений',
+};
+
+const PRIORITY_REACH_KINDS = new Set<InsightKind>([
+  'priority-reach-drop',
+  'priority-persistent-low-reach',
+]);
+const PRIORITY_VIEW_KINDS = new Set<InsightKind>([
+  'priority-view-rate-drop',
+  'priority-portfolio-view-gap',
+]);
+const PRIORITY_CONTACT_KINDS = new Set<InsightKind>([
+  'priority-contact-rate-drop',
+  'priority-persistent-no-result',
+  'priority-portfolio-contact-gap',
+  'priority-peer-gap',
 ]);
 
 function InfoTip({ label, children }: { label: string; children: ReactNode }) {
@@ -82,19 +168,21 @@ function insightIcon(insight: Insight) {
   if (
     insight.kind === 'reach-drop' ||
     insight.kind === 'persistent-low-reach' ||
-    insight.kind === 'demand-gap'
+    PRIORITY_REACH_KINDS.has(insight.kind)
   )
     return <TrendingDown />;
   if (
     insight.kind === 'view-rate-drop' ||
-    insight.kind === 'portfolio-view-gap'
+    insight.kind === 'portfolio-view-gap' ||
+    PRIORITY_VIEW_KINDS.has(insight.kind)
   )
     return <Eye />;
   if (
     insight.kind === 'contact-rate-drop' ||
     insight.kind === 'portfolio-contact-gap' ||
     insight.kind === 'persistent-no-result' ||
-    insight.kind === 'peer-gap'
+    insight.kind === 'peer-gap' ||
+    PRIORITY_CONTACT_KINDS.has(insight.kind)
   )
     return <MessageCircle />;
   if (insight.kind === 'peer-winner' || insight.kind === 'portfolio-winner')
@@ -186,6 +274,8 @@ export function buildDemandGapInsights(
 
   insights.forEach((insight) => {
     if (!NEGATIVE_KINDS.has(insight.kind)) return;
+    const priorityKind = PRIORITY_KIND_BY_SOURCE[insight.kind];
+    if (!priorityKind) return;
     const product = demandForInsight(
       demandByArticle,
       categoryByArticle,
@@ -215,6 +305,8 @@ export function buildDemandGapInsights(
 
   return [...strongestByListing.entries()].map(
     ([listingKey, { insight, demand, article, category }]) => {
+      const priorityKind = PRIORITY_KIND_BY_SOURCE[insight.kind]!;
+      const weakResult = PRIORITY_RESULT_BY_SOURCE[insight.kind]!;
       const demandText =
         demand == null
           ? null
@@ -228,11 +320,11 @@ export function buildDemandGapInsights(
         : 0;
       return {
         ...insight,
-        id: `demand-gap:${listingKey}`,
-        kind: 'demand-gap' as const,
+        id: `${priorityKind}:${listingKey}`,
+        kind: priorityKind,
         tone: 'high' as const,
         article,
-        title: `${categoryText ? `Товар категории ${category}` : 'Высокий спрос'}, а результат объявления слабый`,
+        title: `${categoryText ? `Товар категории ${category}` : 'Приоритетный товар'}: ${weakResult}`,
         summary: insight.summary,
         comparison: `${priorityText}; ${insight.comparison}`,
         sufficiency: `${insight.sufficiency} Приоритет товара взят из загруженной таблицы.`,
@@ -376,7 +468,6 @@ function InsightCard({
           <strong>{reportCountLabel(insight.reportCount)}</strong>
         </span>
       </div>
-
     </article>
   );
 }
@@ -400,24 +491,47 @@ export default function Insights({
   demandByArticle: Record<string, number | null>;
   categoryByArticle: Record<string, string | null>;
 }) {
-  const [scope, setScope] = useState(
-    availableBranches.includes(initialBranch) ? initialBranch : 'network',
+  const [initial] = useState(() =>
+    initialUrlFilters(initialBranch, availableBranches),
   );
-  const [view, setView] = useState<ViewFilter>('all');
-  const [kind, setKind] = useState<'all' | InsightKind>('all');
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [scope, setScope] = useState(initial.scope);
+  const [view, setView] = useState<ViewFilter>(initial.view);
+  const [kind, setKind] = useState<'all' | InsightKind>(initial.kind);
+  const [visibleCount, setVisibleCount] = useState(initial.visibleCount);
   const changeView = (next: ViewFilter) => {
     setView(next);
     setKind('all');
     setVisibleCount(PAGE_SIZE);
+    replaceUrlFilters({
+      priority: next,
+      reason: 'all',
+      shown: String(PAGE_SIZE),
+    });
   };
   const changeKind = (next: 'all' | InsightKind) => {
     setKind(next);
     setVisibleCount(PAGE_SIZE);
+    replaceUrlFilters({ reason: next, shown: String(PAGE_SIZE) });
   };
   const changeScope = (next: string) => {
     setScope(next);
     setVisibleCount(PAGE_SIZE);
+    replaceUrlFilters({ scope: next, shown: String(PAGE_SIZE) });
+  };
+  const showMore = () => {
+    const next = visibleCount + PAGE_SIZE;
+    setVisibleCount(next);
+    replaceUrlFilters({ shown: String(next) });
+  };
+  const resetFilters = () => {
+    setView('all');
+    setKind('all');
+    setVisibleCount(PAGE_SIZE);
+    replaceUrlFilters({
+      priority: 'all',
+      reason: 'all',
+      shown: String(PAGE_SIZE),
+    });
   };
   const effectiveScope =
     scope === 'network' || availableBranches.includes(scope)
@@ -584,8 +698,8 @@ export default function Insights({
                 </p>
                 <p>
                   Длительное отсутствие результата оценивается отдельно. Ноль
-                  контактов за шесть и более отчётов — уже важный факт, даже если
-                  трафика ещё мало, чтобы обвинять именно конверсию.
+                  контактов за шесть и более отчётов — уже важный факт, даже
+                  если трафика ещё мало, чтобы обвинять именно конверсию.
                 </p>
                 <p>
                   Для конверсий учитывается неопределённость маленькой выборки.
@@ -644,7 +758,7 @@ export default function Insights({
                 <button
                   type="button"
                   className="insight-load-more"
-                  onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                  onClick={showMore}
                 >
                   Показать ещё{' '}
                   {Math.min(PAGE_SIZE, filtered.length - displayed.length)} из{' '}
@@ -667,13 +781,7 @@ export default function Insights({
                   : 'Это не утверждение, что все объявления идеальны. Часть объявлений может не иметь достаточной истории или объёма для вывода.'}
               </p>
               {(view !== 'all' || kind !== 'all') && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    changeView('all');
-                    changeKind('all');
-                  }}
-                >
+                <button type="button" onClick={resetFilters}>
                   Сбросить фильтры <ArrowRight />
                 </button>
               )}

@@ -15,7 +15,14 @@ export type InsightKind =
   | 'persistent-no-result'
   | 'portfolio-view-gap'
   | 'portfolio-contact-gap'
-  | 'demand-gap'
+  | 'priority-reach-drop'
+  | 'priority-view-rate-drop'
+  | 'priority-contact-rate-drop'
+  | 'priority-persistent-low-reach'
+  | 'priority-persistent-no-result'
+  | 'priority-portfolio-view-gap'
+  | 'priority-portfolio-contact-gap'
+  | 'priority-peer-gap'
   | 'portfolio-winner'
   | 'peer-gap'
   | 'peer-winner'
@@ -30,7 +37,15 @@ export const INSIGHT_KIND_LABELS: Record<InsightKind, string> = {
   'persistent-no-result': 'Долго без результата',
   'portfolio-view-gap': 'Хуже среднего по просмотрам',
   'portfolio-contact-gap': 'Хуже среднего по контактам',
-  'demand-gap': 'Приоритетный товар, слабый результат',
+  'priority-reach-drop': 'Приоритетный товар: снижение охвата',
+  'priority-view-rate-drop': 'Приоритетный товар: снижение доли просмотров',
+  'priority-contact-rate-drop': 'Приоритетный товар: снижение доли контактов',
+  'priority-persistent-low-reach': 'Приоритетный товар: стабильно низкий охват',
+  'priority-persistent-no-result': 'Приоритетный товар: долго без результата',
+  'priority-portfolio-view-gap': 'Приоритетный товар: просмотры хуже среднего',
+  'priority-portfolio-contact-gap':
+    'Приоритетный товар: контакты хуже среднего',
+  'priority-peer-gap': 'Приоритетный товар: хуже других подразделений',
   'portfolio-winner': 'Лидер подразделения',
   'peer-gap': 'Хуже других подразделений',
   'peer-winner': 'Лучше того же артикула в сети',

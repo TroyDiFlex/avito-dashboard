@@ -109,13 +109,44 @@ const weakInsight = {
   score: 100,
 };
 const priorityInsights = buildDemandGapInsights(
-  [weakInsight],
+  [
+    weakInsight,
+    {
+      ...weakInsight,
+      id: 'low-reach',
+      kind: 'persistent-low-reach',
+      listingId: '124',
+      listingKey: 'И31:124',
+    },
+    {
+      ...weakInsight,
+      id: 'reach-drop',
+      kind: 'reach-drop',
+      listingId: '125',
+      listingKey: 'И31:125',
+    },
+  ],
   { '338004A700': 10, OTHER1: 100, OTHER2: 200, OTHER3: 300 },
   { '338004A700': 'A' },
 );
-assert.equal(priorityInsights.length, 1);
-assert.equal(priorityInsights[0].kind, 'demand-gap');
-assert.ok(priorityInsights[0].title.includes('категории A'));
+assert.equal(priorityInsights.length, 3);
+assert.deepEqual(
+  new Set(priorityInsights.map((insight) => insight.kind)),
+  new Set([
+    'priority-persistent-no-result',
+    'priority-persistent-low-reach',
+    'priority-reach-drop',
+  ]),
+);
+assert.ok(
+  priorityInsights.every((insight) => insight.title.includes('категории A')),
+);
+assert.ok(
+  priorityInsights.some((insight) => insight.title.includes('стабильно')),
+);
+assert.ok(
+  priorityInsights.some((insight) => insight.title.includes('недавно')),
+);
 const html = renderToStaticMarkup(
   createElement(Overview, {
     snapshot,
@@ -166,7 +197,7 @@ const insightsHtml = renderToStaticMarkup(
 );
 assert.ok(insightsHtml.includes('Точки роста'));
 assert.ok(insightsHtml.includes('ДОСТАТОЧНОСТЬ ДАННЫХ'));
-assert.ok(insightsHtml.includes('Почему данных достаточно'));
+assert.ok(insightsHtml.includes('Что такое достаточность данных'));
 assert.ok(insightsHtml.includes('Высокий приоритет'));
 assert.ok(insightsHtml.includes('Стоит проверить'));
 assert.ok(insightsHtml.includes('Сильные примеры'));

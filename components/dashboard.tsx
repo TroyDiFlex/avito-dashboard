@@ -63,6 +63,47 @@ const TITLES: Record<Tab, string> = {
   ads: 'Объявления',
 };
 const DEFAULT_VISIBLE_BRANCHES = BRANCHES.filter((branch) => branch !== 'К20');
+const PERIODS: PeriodPreset[] = ['1m', '3m', '6m', 'all', 'custom'];
+
+function isTab(value: unknown): value is Tab {
+  return typeof value === 'string' && Object.hasOwn(TITLES, value);
+}
+
+function isPeriod(value: unknown): value is PeriodPreset {
+  return PERIODS.includes(value as PeriodPreset);
+}
+
+function dashboardUrl(values: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  Object.entries(values).forEach(([key, value]) => {
+    if (value == null) url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  });
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function urlNavigation() {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab');
+  const period = params.get('period');
+  const partBranch = params.get('partBranch');
+  const partId = params.get('partId');
+  return {
+    tab: isTab(tab) ? tab : null,
+    branch: params.get('branch'),
+    from: params.get('from'),
+    to: params.get('to'),
+    period: isPeriod(period) ? period : null,
+    partTarget:
+      partBranch && partId ? { branch: partBranch, id: partId } : null,
+  };
+}
+
+function currentHistoryState() {
+  return window.history.state && typeof window.history.state === 'object'
+    ? window.history.state
+    : {};
+}
 
 function storedVisibleBranches() {
   if (typeof window === 'undefined') return DEFAULT_VISIBLE_BRANCHES;
@@ -236,6 +277,35 @@ export default function Dashboard() {
   } | null>(null);
 
   function changeTab(nextTab: Tab) {
+    if (nextTab === tab) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
+    const currentState = currentHistoryState();
+    window.history.replaceState(
+      {
+        ...currentState,
+        pikDashboard: {
+          tab,
+          partTarget,
+          scrollY: window.scrollY,
+        },
+      },
+      '',
+      dashboardUrl({
+        tab,
+        partBranch: partTarget?.branch ?? null,
+        partId: partTarget?.id ?? null,
+      }),
+    );
+    window.history.pushState(
+      {
+        ...currentState,
+        pikDashboard: { tab: nextTab, partTarget: null },
+      },
+      '',
+      dashboardUrl({ tab: nextTab, partBranch: null, partId: null }),
+    );
     if (nextTab !== 'parts') setPartTarget(null);
     setTab(nextTab);
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -245,10 +315,7 @@ export default function Dashboard() {
     ad: { branch: string; id: string },
     sourceTab: 'insights' | 'ads',
   ) {
-    const currentState =
-      window.history.state && typeof window.history.state === 'object'
-        ? window.history.state
-        : {};
+    const currentState = currentHistoryState();
     window.history.replaceState(
       {
         ...currentState,
@@ -259,6 +326,7 @@ export default function Dashboard() {
         },
       },
       '',
+      dashboardUrl({ tab: sourceTab, partBranch: null, partId: null }),
     );
     window.history.pushState(
       {
@@ -266,6 +334,11 @@ export default function Dashboard() {
         pikDashboard: { tab: 'parts', partTarget: ad },
       },
       '',
+      dashboardUrl({
+        tab: 'parts',
+        partBranch: ad.branch,
+        partId: ad.id,
+      }),
     );
     setPartTarget(ad);
     setTab('parts');
@@ -311,22 +384,36 @@ export default function Dashboard() {
     } catch {
       /* Defaults are safe. */
     }
-    const restored = restorePeriod(saved, min, max);
+    const url = urlNavigation();
+    const restored = restorePeriod(
+      {
+        from: url.from ?? saved.from,
+        to: url.to ?? saved.to,
+        period: url.period ?? saved.period,
+      },
+      min,
+      max,
+    );
     setFrom(restored.from);
     setTo(restored.to);
     setPeriod(restored.period);
-    if (saved.branch && visibleBranches.includes(saved.branch))
-      setBranch(saved.branch);
+    const restoredBranch = url.branch ?? saved.branch;
+    if (restoredBranch && visibleBranches.includes(restoredBranch))
+      setBranch(restoredBranch);
+    const restoredTab = url.tab ?? saved.tab;
     if (
-      saved.tab === 'overview' ||
-      saved.tab === 'insights' ||
-      saved.tab === 'dynamics' ||
-      saved.tab === 'parts'
+      restoredTab === 'overview' ||
+      restoredTab === 'insights' ||
+      restoredTab === 'dynamics' ||
+      restoredTab === 'parts'
     ) {
-      setTab(saved.tab);
-    } else if (saved.tab === 'ads') {
-      setTab(saved.navigationVersion === 2 ? 'ads' : 'parts');
+      setTab(restoredTab);
+    } else if (restoredTab === 'ads') {
+      setTab(
+        url.tab === 'ads' || saved.navigationVersion === 2 ? 'ads' : 'parts',
+      );
     }
+    setPartTarget(restoredTab === 'parts' ? url.partTarget : null);
     if (restored.reset) {
       setNoticeKind('warning');
       setNotice('Сохранённый период был вне доступной истории и восстановлен.');
@@ -390,8 +477,10 @@ export default function Dashboard() {
         };
       } | null;
       const navigation = state?.pikDashboard;
-      if (!navigation?.tab || !Object.hasOwn(TITLES, navigation.tab)) return;
-      const target = navigation.partTarget;
+      const url = urlNavigation();
+      const nextTab = isTab(navigation?.tab) ? navigation.tab : url.tab;
+      if (!nextTab) return;
+      const target = navigation?.partTarget ?? url.partTarget;
       setPartTarget(
         target &&
           typeof target.branch === 'string' &&
@@ -399,17 +488,24 @@ export default function Dashboard() {
           ? { branch: target.branch, id: target.id }
           : null,
       );
-      setTab(navigation.tab);
+      setTab(nextTab);
+      if (url.branch && visibleBranches.includes(url.branch))
+        setBranch(url.branch);
+      if (validRange(url.from, url.to)) {
+        setFrom(url.from!);
+        setTo(url.to!);
+      }
+      if (url.period) setPeriod(url.period);
       requestAnimationFrame(() =>
         window.scrollTo({
-          top: typeof navigation.scrollY === 'number' ? navigation.scrollY : 0,
+          top: typeof navigation?.scrollY === 'number' ? navigation.scrollY : 0,
           behavior: 'auto',
         }),
       );
     };
     window.addEventListener('popstate', restoreNavigation);
     return () => window.removeEventListener('popstate', restoreNavigation);
-  }, []);
+  }, [visibleBranches]);
 
   useEffect(() => {
     if (!validRange(from, to)) return;
@@ -421,7 +517,32 @@ export default function Dashboard() {
     } catch {
       /* Device preferences are optional. */
     }
-  }, [branch, from, to, tab, period]);
+    const currentState = currentHistoryState();
+    const currentNavigation =
+      currentState.pikDashboard && typeof currentState.pikDashboard === 'object'
+        ? currentState.pikDashboard
+        : {};
+    window.history.replaceState(
+      {
+        ...currentState,
+        pikDashboard: {
+          ...currentNavigation,
+          tab,
+          partTarget,
+        },
+      },
+      '',
+      dashboardUrl({
+        tab,
+        branch,
+        from,
+        to,
+        period,
+        partBranch: tab === 'parts' ? (partTarget?.branch ?? null) : null,
+        partId: tab === 'parts' ? (partTarget?.id ?? null) : null,
+      }),
+    );
+  }, [branch, from, partTarget, period, tab, to]);
 
   useEffect(() => {
     try {
