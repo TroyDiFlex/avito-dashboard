@@ -39,6 +39,7 @@ import {
   saveBrowserSnapshot,
 } from '@/lib/client-store';
 import { demoSnapshot } from '@/lib/demo';
+import { DEFAULT_DEMAND_TEXT, parseDemandAnalysis } from '@/lib/demand';
 import { scopeBranches } from '@/lib/explore';
 import { describeIssue, filterIssues, isBlockingIssue } from '@/lib/issues';
 import {
@@ -74,6 +75,15 @@ function storedVisibleBranches() {
     return valid.length ? valid : DEFAULT_VISIBLE_BRANCHES;
   } catch {
     return DEFAULT_VISIBLE_BRANCHES;
+  }
+}
+
+function storedDemandText() {
+  if (typeof window === 'undefined') return DEFAULT_DEMAND_TEXT;
+  try {
+    return localStorage.getItem('pik-demand-analysis') ?? DEFAULT_DEMAND_TEXT;
+  } catch {
+    return DEFAULT_DEMAND_TEXT;
   }
 }
 
@@ -133,13 +143,6 @@ function Sidebar({
           <span>Обзор недели</span>
         </button>
         <button
-          className={tab === 'insights' ? 'active' : ''}
-          onClick={() => onTabChange('insights')}
-        >
-          <Lightbulb />
-          <span>Точки роста</span>
-        </button>
-        <button
           className={tab === 'dynamics' ? 'active' : ''}
           onClick={() => onTabChange('dynamics')}
         >
@@ -159,6 +162,13 @@ function Sidebar({
         >
           <PackageSearch />
           <span>Запчасти</span>
+        </button>
+        <button
+          className={tab === 'insights' ? 'active' : ''}
+          onClick={() => onTabChange('insights')}
+        >
+          <Lightbulb />
+          <span>Точки роста</span>
         </button>
       </nav>
       <div className="sidebar-footer">
@@ -217,6 +227,8 @@ export default function Dashboard() {
   const [notice, setNotice] = useState('');
   const [noticeKind, setNoticeKind] = useState<NoticeKind>('progress');
   const [settingNotice, setSettingNotice] = useState('');
+  const [demandNotice, setDemandNotice] = useState('');
+  const [demandText, setDemandText] = useState(storedDemandText);
   const [visibleBranches, setVisibleBranches] = useState(storedVisibleBranches);
   const [partTarget, setPartTarget] = useState<{
     branch: string;
@@ -226,6 +238,37 @@ export default function Dashboard() {
   function changeTab(nextTab: Tab) {
     if (nextTab !== 'parts') setPartTarget(null);
     setTab(nextTab);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  function openPart(
+    ad: { branch: string; id: string },
+    sourceTab: 'insights' | 'ads',
+  ) {
+    const currentState =
+      window.history.state && typeof window.history.state === 'object'
+        ? window.history.state
+        : {};
+    window.history.replaceState(
+      {
+        ...currentState,
+        pikDashboard: {
+          tab: sourceTab,
+          partTarget: null,
+          scrollY: window.scrollY,
+        },
+      },
+      '',
+    );
+    window.history.pushState(
+      {
+        ...currentState,
+        pikDashboard: { tab: 'parts', partTarget: ad },
+      },
+      '',
+    );
+    setPartTarget(ad);
+    setTab('parts');
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
@@ -338,6 +381,37 @@ export default function Dashboard() {
   // oxlint-enable react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const restoreNavigation = (event: PopStateEvent) => {
+      const state = event.state as {
+        pikDashboard?: {
+          tab?: Tab;
+          partTarget?: { branch?: string; id?: string } | null;
+          scrollY?: number;
+        };
+      } | null;
+      const navigation = state?.pikDashboard;
+      if (!navigation?.tab || !Object.hasOwn(TITLES, navigation.tab)) return;
+      const target = navigation.partTarget;
+      setPartTarget(
+        target &&
+          typeof target.branch === 'string' &&
+          typeof target.id === 'string'
+          ? { branch: target.branch, id: target.id }
+          : null,
+      );
+      setTab(navigation.tab);
+      requestAnimationFrame(() =>
+        window.scrollTo({
+          top: typeof navigation.scrollY === 'number' ? navigation.scrollY : 0,
+          behavior: 'auto',
+        }),
+      );
+    };
+    window.addEventListener('popstate', restoreNavigation);
+    return () => window.removeEventListener('popstate', restoreNavigation);
+  }, []);
+
+  useEffect(() => {
     if (!validRange(from, to)) return;
     try {
       localStorage.setItem(
@@ -388,6 +462,10 @@ export default function Dashboard() {
     relevantBranches,
     from,
     to,
+  );
+  const demandAnalysis = useMemo(
+    () => parseDemandAnalysis(demandText),
+    [demandText],
   );
 
   async function refresh() {
@@ -505,6 +583,18 @@ export default function Dashboard() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  function saveDemandAnalysis() {
+    setDemandNotice('');
+    try {
+      localStorage.setItem('pik-demand-analysis', demandText);
+      setDemandNotice(
+        `Сохранено: ${demandAnalysis.recognized} артикулов, ${demandAnalysis.withValue} со значением спроса.`,
+      );
+    } catch {
+      setDemandNotice('Не удалось сохранить аналитику спроса на устройстве.');
     }
   }
 
@@ -637,11 +727,8 @@ export default function Dashboard() {
                   to={to}
                   initialBranch={branch}
                   availableBranches={visibleBranches}
-                  onOpenPart={(ad) => {
-                    setPartTarget(ad);
-                    setTab('parts');
-                    window.scrollTo({ top: 0, behavior: 'auto' });
-                  }}
+                  demandByArticle={demandAnalysis.values}
+                  onOpenPart={(ad) => openPart(ad, 'insights')}
                 />
               )}
               {tab === 'parts' && (
@@ -666,11 +753,7 @@ export default function Dashboard() {
                   to={to}
                   initialBranch={branch}
                   availableBranches={visibleBranches}
-                  onOpenPart={(ad) => {
-                    setPartTarget(ad);
-                    setTab('parts');
-                    window.scrollTo({ top: 0, behavior: 'auto' });
-                  }}
+                  onOpenPart={(ad) => openPart(ad, 'ads')}
                 />
               )}
             </div>
@@ -683,8 +766,7 @@ export default function Dashboard() {
           <DialogHeader>
             <DialogTitle>Настройки</DialogTitle>
             <DialogDescription>
-              Выберите подразделения для отчётов и настройте подключение к
-              таблицам.
+              Подразделения, аналитика спроса и подключение таблиц.
             </DialogDescription>
           </DialogHeader>
           <section className="settings-section">
@@ -711,6 +793,56 @@ export default function Dashboard() {
                 );
               })}
             </div>
+          </section>
+          <section className="settings-section demand-settings">
+            <div className="settings-section-heading">
+              <h3>Аналитика спроса</h3>
+              <p>
+                Вставьте строки из таблицы: артикул, затем значение спроса через
+                Tab. Суффикс VRN удаляется автоматически.
+              </p>
+            </div>
+            <label htmlFor="demand-analysis">
+              <span>Артикул и спрос</span>
+              <textarea
+                id="demand-analysis"
+                value={demandText}
+                onChange={(event) => {
+                  setDemandText(event.target.value);
+                  setDemandNotice('');
+                }}
+                rows={9}
+                spellCheck={false}
+                placeholder={'03L115389HVRN\t66\n11428596283VRN\t569'}
+              />
+            </label>
+            <div className="demand-import-summary">
+              <span>
+                <b>{demandAnalysis.recognized}</b> артикулов
+              </span>
+              <span>
+                <b>{demandAnalysis.withValue}</b> со спросом
+              </span>
+              {demandAnalysis.withoutValue > 0 && (
+                <span>
+                  <b>{demandAnalysis.withoutValue}</b> без значения
+                </span>
+              )}
+              {demandAnalysis.invalid > 0 && (
+                <span className="warning">
+                  <b>{demandAnalysis.invalid}</b> не распознано
+                </span>
+              )}
+            </div>
+            {demandNotice && (
+              <output className="dialog-notice demand-notice">
+                {demandNotice}
+              </output>
+            )}
+            <Button type="button" onClick={saveDemandAnalysis}>
+              <Check />
+              Сохранить аналитику спроса
+            </Button>
           </section>
           <section className="settings-section connection-settings">
             <div className="settings-section-heading">

@@ -30,9 +30,17 @@ import {
   type InsightKind,
   type InsightTone,
 } from '@/lib/insights';
+import { demandForArticle, normalizeDemandArticle } from '@/lib/demand';
+import { extractArticle } from '@/lib/explore';
 import type { AdRow, Snapshot } from '@/lib/model';
 
-type ViewFilter = 'all' | 'recent' | 'persistent' | 'opportunity' | 'check';
+type ViewFilter =
+  | 'all'
+  | 'recent'
+  | 'persistent'
+  | 'demand'
+  | 'opportunity'
+  | 'check';
 
 const RECENT_KINDS = new Set<InsightKind>([
   'reach-drop',
@@ -52,6 +60,7 @@ const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
   { value: 'recent', label: 'Просели или отстают' },
   { value: 'persistent', label: 'Стабильно слабые' },
+  { value: 'demand', label: 'Есть данные спроса' },
   { value: 'opportunity', label: 'Успешные примеры' },
   { value: 'check', label: 'Проверки' },
 ];
@@ -116,34 +125,103 @@ function avitoUrl(id?: string) {
   return id && /^\d+$/.test(id) ? `https://www.avito.ru/${id}` : null;
 }
 
+function demandForInsight(
+  values: Record<string, number | null>,
+  insight: Insight,
+) {
+  const candidates = [
+    insight.article,
+    ...extractArticle(insight.name).candidates,
+  ].filter((value): value is string => Boolean(value));
+  for (const article of candidates) {
+    const demand = demandForArticle(values, article);
+    if (demand.found)
+      return { ...demand, article: normalizeDemandArticle(article) };
+  }
+  return { found: false, value: null, article: insight.article };
+}
+
 function InsightCard({
   insight,
   onOpenPart,
+  demandByArticle,
 }: {
   insight: Insight;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  demandByArticle: Record<string, number | null>;
 }) {
   const url = avitoUrl(insight.listingId);
+  const demand = demandForInsight(demandByArticle, insight);
+  const displayedArticle = demand.found ? demand.article : insight.article;
   return (
     <article className={`insight-card tone-${insight.tone}`}>
       <header className="insight-card-header">
         <span className="insight-card-icon">{insightIcon(insight)}</span>
         <div className="insight-card-heading">
           <div className="insight-card-tags">
-            <span className={`insight-priority tone-${insight.tone}`}>
-              {toneLabel(insight.tone)}
-            </span>
-            <span>{insight.branch}</span>
-            {insight.article && <span>Артикул {insight.article}</span>}
+            <span className="insight-branch">{insight.branch}</span>
+            {displayedArticle && (
+              <span className="insight-article">
+                Артикул {displayedArticle}
+              </span>
+            )}
+            {demand.found && (
+              <span className="insight-demand">
+                Спрос{' '}
+                {demand.value == null
+                  ? '—'
+                  : demand.value.toLocaleString('ru-RU')}
+              </span>
+            )}
           </div>
-          <h3>{insight.title}</h3>
-          <p>{insight.summary}</p>
+          <div className="insight-title-row">
+            <h3>
+              {url ? (
+                <a href={url} target="_blank" rel="noreferrer">
+                  {insight.name}
+                  <ExternalLink />
+                </a>
+              ) : (
+                insight.name
+              )}
+            </h3>
+            <div className="insight-actions">
+              {url && (
+                <a href={url} target="_blank" rel="noreferrer">
+                  <ExternalLink />
+                  Открыть объявление
+                </a>
+              )}
+              {insight.listingId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenPart({
+                      branch: insight.branch,
+                      id: insight.listingId!,
+                    })
+                  }
+                >
+                  <ChartNoAxesCombined />
+                  Сравнить подразделения
+                </button>
+              )}
+            </div>
+          </div>
+          {insight.listingId && (
+            <span className="insight-listing-id">№ {insight.listingId}</span>
+          )}
         </div>
       </header>
 
-      <div className="insight-listing-name">
-        <strong>{insight.name}</strong>
-        {insight.listingId && <span>№ {insight.listingId}</span>}
+      <div className="insight-signal-summary">
+        <span className={`insight-priority tone-${insight.tone}`}>
+          {toneLabel(insight.tone)}
+        </span>
+        <div>
+          <strong>{insight.title}</strong>
+          <p>{insight.summary}</p>
+        </div>
       </div>
 
       <div className="insight-evidence">
@@ -198,28 +276,6 @@ function InsightCard({
             ))}
           </div>
         </div>
-        <div className="insight-actions">
-          {url && (
-            <a href={url} target="_blank" rel="noreferrer">
-              <ExternalLink />
-              Открыть объявление
-            </a>
-          )}
-          {insight.listingId && (
-            <button
-              type="button"
-              onClick={() =>
-                onOpenPart({
-                  branch: insight.branch,
-                  id: insight.listingId!,
-                })
-              }
-            >
-              <ChartNoAxesCombined />
-              Сравнить подразделения
-            </button>
-          )}
-        </div>
       </footer>
     </article>
   );
@@ -232,6 +288,7 @@ export default function Insights({
   availableBranches,
   initialBranch,
   onOpenPart,
+  demandByArticle,
 }: {
   snapshot: Snapshot;
   from: string;
@@ -239,6 +296,7 @@ export default function Insights({
   availableBranches: string[];
   initialBranch: string;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  demandByArticle: Record<string, number | null>;
 }) {
   const [scope, setScope] = useState(
     availableBranches.includes(initialBranch) ? initialBranch : 'network',
@@ -272,15 +330,24 @@ export default function Insights({
       }),
     [availableBranches, effectiveScope, from, snapshot, to],
   );
-  const filtered = report.insights.filter((insight) => {
-    const viewMatches =
-      view === 'all' ||
-      (view === 'recent' && RECENT_KINDS.has(insight.kind)) ||
-      (view === 'persistent' && PERSISTENT_KINDS.has(insight.kind)) ||
-      (view === 'opportunity' && insight.tone === 'opportunity') ||
-      (view === 'check' && insight.tone === 'check');
-    return viewMatches && (kind === 'all' || insight.kind === kind);
-  });
+  const filtered = report.insights
+    .filter((insight) => {
+      const viewMatches =
+        view === 'all' ||
+        (view === 'recent' && RECENT_KINDS.has(insight.kind)) ||
+        (view === 'persistent' && PERSISTENT_KINDS.has(insight.kind)) ||
+        (view === 'demand' &&
+          demandForInsight(demandByArticle, insight).found) ||
+        (view === 'opportunity' && insight.tone === 'opportunity') ||
+        (view === 'check' && insight.tone === 'check');
+      return viewMatches && (kind === 'all' || insight.kind === kind);
+    })
+    .sort((left, right) => {
+      if (view !== 'demand') return 0;
+      const leftDemand = demandForInsight(demandByArticle, left).value;
+      const rightDemand = demandForInsight(demandByArticle, right).value;
+      return (rightDemand ?? -1) - (leftDemand ?? -1);
+    });
   const displayed = filtered.slice(0, visibleCount);
   const scopes = [
     { value: 'network', label: 'Все подразделения' },
@@ -407,6 +474,10 @@ export default function Insights({
               <b>{report.diagnostics.structuralChecks}</b>
               структурных проверок
             </span>
+            <span>
+              <b>{Object.keys(demandByArticle).length}</b>
+              артикулов в аналитике спроса
+            </span>
           </div>
           <details className="insight-methodology">
             <summary>
@@ -472,6 +543,7 @@ export default function Insights({
                   key={insight.id}
                   insight={insight}
                   onOpenPart={onOpenPart}
+                  demandByArticle={demandByArticle}
                 />
               ))}
               {displayed.length < filtered.length && (

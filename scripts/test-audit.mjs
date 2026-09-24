@@ -131,6 +131,7 @@ const insightsHtml = renderToStaticMarkup(
     to: '2026-08-31',
     availableBranches: branches,
     initialBranch: 'network',
+    demandByArticle: { 11128507607: 66 },
     onOpenPart() {},
   }),
 );
@@ -140,6 +141,8 @@ assert.ok(insightsHtml.includes('Почему данных достаточно'
 assert.ok(insightsHtml.includes('Просели или отстают'));
 assert.ok(insightsHtml.includes('Стабильно слабые'));
 assert.ok(insightsHtml.includes('Сильные примеры'));
+assert.ok(insightsHtml.includes('Спрос'));
+assert.ok(insightsHtml.includes('66'));
 assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
 console.log(
   'Passed: insights, sufficiency explanations and demo signals render.',
