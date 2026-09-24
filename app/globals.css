@@ -734,8 +734,8 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .insight-card h3 a { display: inline-flex; align-items: flex-start; gap: 7px; color: inherit; }
 .insight-card h3 a:hover { color: #fff; text-decoration: underline; text-decoration-color: #55555e; text-underline-offset: 4px; }
 .insight-card h3 svg { width: 12px; height: 12px; flex: none; margin-top: 4px; color: #6f6f78; }
-.insight-signal-summary { display: flex; align-items: flex-start; gap: 8px; padding: 8px 13px 9px 57px; background: #121216; border-top: 1px solid #222228; }
-.insight-priority { flex: none; padding: 3px 6px; color: #b8b8c0; background: #202025; border-radius: 5px; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.insight-signal-summary { display: flex; align-items: baseline; gap: 8px; padding: 8px 13px 9px 57px; background: #121216; border-top: 1px solid #222228; }
+.insight-priority { flex: none; padding: 3px 6px; color: #b8b8c0; background: #202025; border-radius: 5px; font-size: 9px; font-weight: 700; line-height: 1.35; letter-spacing: .04em; text-transform: uppercase; }
 .insight-priority.tone-high { color: #ff7b83; background: rgba(239, 51, 64, .1); }
 .insight-priority.tone-medium { color: #fbbf24; background: rgba(245, 158, 11, .09); }
 .insight-priority.tone-opportunity { color: #4ade80; background: rgba(34, 197, 94, .09); }
