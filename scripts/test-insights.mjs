@@ -92,11 +92,17 @@ assert.deepEqual(
 const clearContactDrop = dates.map((end, index) =>
   ad({ end, contacts: index < 4 ? 5 : 0, views: index < 4 ? 25 : 10 }),
 );
+const clearContactDropInsight = report(clearContactDrop).insights.find(
+  (insight) => insight.kind === 'contact-rate-drop',
+);
 assert.ok(
-  report(clearContactDrop).insights.some(
-    (insight) => insight.kind === 'contact-rate-drop',
-  ),
+  clearContactDropInsight,
   'A stable 20% baseline followed by zero contacts with four expected contacts must be shown.',
+);
+assert.equal(
+  clearContactDropInsight.reportCount,
+  dates.length,
+  'The card must expose the number of source reports used in the calculation.',
 );
 
 const tooLittleForZeroConclusion = dates.map((end, index) =>

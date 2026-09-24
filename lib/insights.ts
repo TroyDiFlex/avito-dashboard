@@ -53,6 +53,7 @@ export interface Insight {
   current: string;
   comparison: string;
   expected?: string;
+  reportCount: number;
   sufficiency: string;
   method: string;
   facts: string[];
@@ -442,6 +443,7 @@ function rateInsight(test: RateTest): Insight {
     current: `Сейчас: ${num(test.currentSuccesses)} из ${num(test.currentTrials)} · ${percent(test.currentRate)}`,
     comparison: `Раньше: ${num(test.baselineSuccesses)} из ${num(test.baselineTrials)} · ${percent(test.baselineRate)}`,
     expected: `При прежнем уровне ожидалось около ${numberFormat.format(test.expected)} ${contact ? 'контакта' : 'просмотра'}.`,
+    reportCount: test.baselineRows.length + test.currentRows.length,
     sufficiency: `Использованы ${test.baselineRows.length} отчётов базы и ${test.currentRows.length} последних отчёта. Объёма достаточно, чтобы ожидать не меньше ${contact ? '3 контактов' : '10 просмотров'}.`,
     method: `Вероятность получить такое или более сильное снижение случайно — ${probabilityLabel(test.pValue)}. Сигнал также прошёл общую защиту от случайных срабатываний среди всех проверенных объявлений.`,
     facts,
@@ -520,6 +522,10 @@ function reachInsight(candidate: ReachCandidate): Insight {
     summary: `Показы снизились на ${numberFormat.format(candidate.drop * 100)}% и остаются низкими в большинстве из ${CURRENT_REPORTS} последних отчётов.`,
     current: `Сейчас: ${num(candidate.currentTotal)} показов за ${CURRENT_REPORTS} отчёта`,
     comparison: `Раньше: медиана ${num(candidate.baselineMedian)} показов за отчёт`,
+    reportCount: Math.min(
+      candidate.listing.rows.length,
+      CURRENT_REPORTS + BASELINE_REPORTS,
+    ),
     sufficiency: `История содержит не меньше 4 базовых и ${CURRENT_REPORTS} текущих отчётов. База была достаточно стабильной: типичное отклонение ${percent(candidate.relativeMad)}.`,
     method: `Для охвата не предполагается идеальное случайное распределение. Сигнал требует сильного падения, стабильной базы и минимум трёх слабых отчётов из ${CURRENT_REPORTS} последних.`,
     facts: [
@@ -616,6 +622,7 @@ function persistentInsights(active: ListingSeries[]): Insight[] {
         comparison: weakReach
           ? `Медиана охвата подразделения: ${num(typicalReach!)} за отчёт`
           : `Наблюдение: ${listing.rows.length} отчётов`,
+        reportCount: listing.rows.length,
         sufficiency: weakReach
           ? `Низкий охват повторяется не меньше ${MIN_OBSERVATION_REPORTS} отчётов и сравнивается с устойчивой медианой активных объявлений того же подразделения.`
           : `Это прямой факт за ${listing.rows.length} отчётов, а не оценка по одному просмотру или одной неделе.`,
@@ -759,6 +766,7 @@ function portfolioRateInsight(test: PortfolioRateTest): Insight {
     current: `${num(test.successes)} из ${num(test.trials)} · ${percent(test.rate)}`,
     comparison: `Остальные объявления: ${percent(test.peerRate)}`,
     expected: `При среднем уровне ожидалось около ${numberFormat.format(test.expected)} ${contacts ? 'контакта' : 'просмотра'}.`,
+    reportCount: test.rows.length,
     sufficiency: `Взяты до ${PORTFOLIO_REPORTS} последних отчётов. Объёма достаточно, чтобы ожидать не меньше ${contacts ? '3 контактов' : '10 просмотров'}.`,
     method: `Вероятность такого или более сильного отставания случайно — ${probabilityLabel(test.pValue)}. Сигнал прошёл защиту от массовых случайных находок. Сравнение с подразделением — ориентир, а не доказательство одинакового спроса на все детали.`,
     facts: [
@@ -822,6 +830,7 @@ function portfolioWinners(active: ListingSeries[]): Insight[] {
         summary: `Объявление входит в верхние ${num(Math.max(1, Math.round((1 - percentile) * 100)))}% по числу контактов среди активных объявлений подразделения.`,
         current: `${num(entry.contacts)} контактов · ${num(entry.views)} просмотров`,
         comparison: `${entry.rows.length} последних отчётов · конверсия ${percent(rate)}`,
+        reportCount: entry.rows.length,
         sufficiency: `Фактически получено не меньше 5 контактов за ${entry.rows.length} отчётов; лидерство основано на объёме результата, а не на одном успешном просмотре.`,
         method:
           'Это сравнительный факт внутри подразделения. Он не доказывает, что результат вызван только оформлением: на него также влияют спрос, цена, наличие и продвижение.',
@@ -1038,6 +1047,7 @@ function peerInsight(test: PeerTest): Insight {
     expected: winner
       ? undefined
       : `При сетевом уровне ожидалось около ${numberFormat.format(test.expected)} контакта.`,
+    reportCount: new Set(test.rows.map((row) => row.end)).size,
     sufficiency: `Сравниваются ${test.peerBranches} других подразделения, в каждом есть не меньше 3 отчётов. У них накоплено ${num(test.peerSuccesses)} контактов, а здесь объёма хватает минимум для 3 ожидаемых контактов.`,
     method: `Вероятность получить такое или более сильное отличие случайно — ${probabilityLabel(test.pValue)}. Сигнал прошёл общую защиту от случайных находок.`,
     facts,
@@ -1083,6 +1093,7 @@ function duplicateInsights(
         summary: `Найдено ${listings.length} объявления с артикулом ${representative.article}. Это не ошибка, но стоит проверить, не разделяют ли они один спрос.`,
         current: `${listings.length} объявления · номера ${listings.map((listing) => listing.id).join(', ')}`,
         comparison: 'Вывод об эффективности не делается',
+        reportCount: 1,
         sufficiency:
           'Совпадение основано на подразделении, артикуле и наличии объявлений в последнем отчёте.',
         method:
@@ -1187,6 +1198,14 @@ export function buildInsightReport(
         summary: `${affected.length} из ${eligible} объявлений с достаточной историей одновременно потеряли не меньше 60% обычного охвата.`,
         current: `${affected.length} объявлений со снижением`,
         comparison: `${num((affected.length / eligible) * 100)}% проверяемых объявлений`,
+        reportCount: Math.min(
+          ...affected.map((candidate) =>
+            Math.min(
+              candidate.listing.rows.length,
+              CURRENT_REPORTS + BASELINE_REPORTS,
+            ),
+          ),
+        ),
         sufficiency: `Каждое объявление имеет стабильную базу и минимум три слабых отчёта из ${CURRENT_REPORTS} последних. Массовость проверяется только среди объявлений с достаточной историей.`,
         method:
           'Отдельные карточки этого снижения скрыты, чтобы не выдавать вероятную общую проблему подразделения за множество независимых проблем объявлений.',

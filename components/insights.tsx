@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle,
   ArrowRight,
   ChartNoAxesCombined,
   ChevronDown,
@@ -10,7 +9,6 @@ import {
   ExternalLink,
   Eye,
   Layers3,
-  Lightbulb,
   MessageCircle,
   ShieldCheck,
   Sparkles,
@@ -105,6 +103,20 @@ function toneLabel(tone: InsightTone) {
   if (tone === 'medium') return 'Стоит проверить';
   if (tone === 'opportunity') return 'Успешный пример';
   return 'Возможный дубль';
+}
+
+function reportCountLabel(count: number) {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  const word =
+    mod100 >= 11 && mod100 <= 14
+      ? 'отчётов'
+      : mod10 === 1
+        ? 'отчёт'
+        : mod10 >= 2 && mod10 <= 4
+          ? 'отчёта'
+          : 'отчётов';
+  return `${count.toLocaleString('ru-RU')} ${word}`;
 }
 
 function avitoUrl(id?: string) {
@@ -292,47 +304,27 @@ function InsightCard({
                 insight.name
               )}
             </h3>
-            <div className="insight-header-controls">
-              <details className="insight-proof">
-                <summary>
-                  <ShieldCheck />
-                  Почему данных достаточно
-                  <ChevronDown />
-                </summary>
-                <div>
-                  <p>{insight.sufficiency}</p>
-                  <p>{insight.method}</p>
-                  {!!insight.facts.length && (
-                    <ul>
-                      {insight.facts.map((fact) => (
-                        <li key={fact}>{fact}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </details>
-              <div className="insight-actions">
-                {url && (
-                  <a href={url} target="_blank" rel="noreferrer">
-                    <ExternalLink />
-                    Открыть объявление
-                  </a>
-                )}
-                {insight.listingId && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onOpenPart({
-                        branch: insight.branch,
-                        id: insight.listingId!,
-                      })
-                    }
-                  >
-                    <ChartNoAxesCombined />
-                    Сравнить подразделения
-                  </button>
-                )}
-              </div>
+            <div className="insight-actions">
+              {url && (
+                <a href={url} target="_blank" rel="noreferrer">
+                  <ExternalLink />
+                  Открыть объявление
+                </a>
+              )}
+              {insight.listingId && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenPart({
+                      branch: insight.branch,
+                      id: insight.listingId!,
+                    })
+                  }
+                >
+                  <ChartNoAxesCombined />
+                  Сравнить подразделения
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -348,7 +340,9 @@ function InsightCard({
         </div>
       </div>
 
-      <div className="insight-evidence">
+      <div
+        className={`insight-evidence ${insight.expected ? 'with-expected' : ''}`}
+      >
         <span>
           <small>Фактический результат</small>
           <strong>{insight.current}</strong>
@@ -370,6 +364,10 @@ function InsightCard({
             <strong>{insight.expected}</strong>
           </span>
         )}
+        <span>
+          <small>Отчётов в расчёте</small>
+          <strong>{reportCountLabel(insight.reportCount)}</strong>
+        </span>
       </div>
 
     </article>
@@ -514,133 +512,89 @@ export default function Insights({
           </div>
         </section>
 
-        <section className="insight-summary-grid" aria-label="Сводка сигналов">
-          <button
-            className={`summary-high ${view === 'high' ? 'active' : ''}`}
-            onClick={() => changeView(view === 'high' ? 'all' : 'high')}
-          >
-            <AlertTriangle />
-            <span>Высокий приоритет</span>
-            <strong>{viewCounts.high}</strong>
-            <small>Сильные подтверждённые отклонения</small>
-          </button>
-          <button
-            className={`summary-medium ${view === 'medium' ? 'active' : ''}`}
-            onClick={() => changeView(view === 'medium' ? 'all' : 'medium')}
-          >
-            <Eye />
-            <span>Стоит проверить</span>
-            <strong>{viewCounts.medium}</strong>
-            <small>Умеренные отклонения и возможные дубли</small>
-          </button>
-          <button
-            className={`summary-opportunity ${view === 'opportunity' ? 'active' : ''}`}
-            onClick={() =>
-              changeView(view === 'opportunity' ? 'all' : 'opportunity')
-            }
-          >
-            <Lightbulb />
-            <span>Сильные примеры</span>
-            <strong>{viewCounts.opportunity}</strong>
-            <small>Лидеры с реальными контактами, не один из одного</small>
-          </button>
-          <div className="insight-summary-quiet">
-            <ShieldCheck />
-            <span>
-              Пока рано оценивать
-              <InfoTip label="Почему пока рано оценивать объявления">
-                У этих объявлений меньше шести отчётов. Они не записываются ни в
-                хорошие, ни в плохие: системе ещё не хватает длительности
-                наблюдения.
-              </InfoTip>
-            </span>
-            <strong>{report.diagnostics.insufficientHistory}</strong>
-            <small>Менее шести отчётов наблюдения</small>
-          </div>
-        </section>
-
-        <section className="insight-coverage panel">
-          <div className="insight-coverage-heading">
-            <div>
-              <span className="eyebrow">ДОСТАТОЧНОСТЬ ДАННЫХ</span>
-              <h2>Почему используются не все объявления</h2>
-            </div>
-            <InfoTip label="Как читать показатели достаточности">
+        <details className="insight-coverage panel">
+          <summary className="insight-coverage-summary">
+            <span className="eyebrow">ДОСТАТОЧНОСТЬ ДАННЫХ</span>
+            <strong>Почему используются не все объявления?</strong>
+            <ChevronDown />
+          </summary>
+          <div className="insight-coverage-details">
+            <p className="insight-coverage-note">
               Проверки независимы: объявлению может хватать истории для анализа
               показов, но не хватать просмотров для анализа контактов. Поэтому
               числа причин могут пересекаться.
-            </InfoTip>
-          </div>
-          <div className="insight-coverage-stats">
-            <span>
-              <small>Активных объявлений</small>
-              <strong>{report.diagnostics.activeListings}</strong>
-            </span>
-            <span>
-              <small>Есть конкретный вывод</small>
-              <strong>{report.diagnostics.listingsWithConclusions}</strong>
-            </span>
-            <span>
-              <small>Стабильно слабых</small>
-              <strong>{report.diagnostics.persistentWeak}</strong>
-            </span>
-            <span>
-              <small>Достаточно истории, отклонений не найдено</small>
-              <strong>{report.diagnostics.observedWithoutIssue}</strong>
-            </span>
-          </div>
-          <div className="insight-exclusions">
-            <span>
-              <b>{report.diagnostics.insufficientHistory}</b>
-              пока мало истории
-            </span>
-            <span>
-              <b>{report.diagnostics.lowVolume}</b>
-              мало трафика для оценки именно конверсии
-            </span>
-            <span>
-              <b>{report.diagnostics.structuralChecks}</b>
-              возможных дублей
-            </span>
-            <span>
-              <b>{Object.keys(demandByArticle).length}</b>
-              артикулов в аналитике товаров
-            </span>
-            <span>
-              <b>{Object.values(categoryByArticle).filter(Boolean).length}</b>
-              с категорией товара
-            </span>
-          </div>
-          <details className="insight-methodology">
-            <summary>
-              Как принимается решение
-              <ChevronDown />
-            </summary>
-            <div>
-              <p>
-                Сначала проверяется полнота истории и объём данных. Затем
-                последние четыре отчёта сравниваются с предыдущими, с другими
-                объявлениями подразделения и, где возможно, с тем же артикулом
-                минимум в двух других подразделениях.
-              </p>
-              <p>
-                Длительное отсутствие результата оценивается отдельно. Ноль
-                контактов за шесть и более отчётов — уже важный факт, даже если
-                трафика ещё мало, чтобы обвинять именно конверсию.
-              </p>
-              <p>
-                Для конверсий учитывается неопределённость маленькой выборки.
-                После этого применяется общая защита от случайных находок,
-                возникающих из-за одновременной проверки сотен объявлений.
-              </p>
-              <p>
-                Даже статистически подтверждённое отличие показывается только
-                при заметном практическом эффекте: небольшие колебания не
-                становятся сигналами.
-              </p>
+            </p>
+            <div className="insight-coverage-stats">
+              <span>
+                <small>Активных объявлений</small>
+                <strong>{report.diagnostics.activeListings}</strong>
+              </span>
+              <span>
+                <small>Есть конкретный вывод</small>
+                <strong>{report.diagnostics.listingsWithConclusions}</strong>
+              </span>
+              <span>
+                <small>Стабильно слабых</small>
+                <strong>{report.diagnostics.persistentWeak}</strong>
+              </span>
+              <span>
+                <small>Достаточно истории, отклонений не найдено</small>
+                <strong>{report.diagnostics.observedWithoutIssue}</strong>
+              </span>
+              <span>
+                <small>Пока рано оценивать</small>
+                <strong>{report.diagnostics.insufficientHistory}</strong>
+              </span>
             </div>
-          </details>
-        </section>
+            <div className="insight-exclusions">
+              <span>
+                <b>{report.diagnostics.lowVolume}</b>
+                мало трафика для оценки именно конверсии
+              </span>
+              <span>
+                <b>{report.diagnostics.structuralChecks}</b>
+                возможных дублей
+              </span>
+              <span>
+                <b>{Object.keys(demandByArticle).length}</b>
+                артикулов в аналитике товаров
+              </span>
+              <span>
+                <b>{Object.values(categoryByArticle).filter(Boolean).length}</b>
+                с категорией товара
+              </span>
+            </div>
+            <details className="insight-methodology">
+              <summary>
+                Как принимается решение
+                <ChevronDown />
+              </summary>
+              <div>
+                <p>
+                  Сначала проверяется полнота истории и объём данных. Затем
+                  последние четыре отчёта сравниваются с предыдущими, с другими
+                  объявлениями подразделения и, где возможно, с тем же артикулом
+                  минимум в двух других подразделениях.
+                </p>
+                <p>
+                  Длительное отсутствие результата оценивается отдельно. Ноль
+                  контактов за шесть и более отчётов — уже важный факт, даже если
+                  трафика ещё мало, чтобы обвинять именно конверсию.
+                </p>
+                <p>
+                  Для конверсий учитывается неопределённость маленькой выборки.
+                  После этого применяется общая защита от случайных находок,
+                  возникающих из-за одновременной проверки сотен объявлений.
+                </p>
+                <p>
+                  Даже статистически подтверждённое отличие показывается только
+                  при заметном практическом эффекте: небольшие колебания не
+                  становятся сигналами.
+                </p>
+              </div>
+            </details>
+          </div>
+        </details>
 
         <section className="insight-list-panel panel">
           <div className="insight-list-toolbar">
