@@ -764,7 +764,7 @@ function portfolioRateInsight(test: PortfolioRateTest): Insight {
     title: contacts
       ? 'Просмотры есть, но контактов меньше ориентира'
       : 'Показы есть, но просмотров меньше ориентира',
-    summary: `${contacts ? 'Конверсия в контакты' : 'Доля просмотров'} ниже среднего уровня остальных активных объявлений подразделения на ${numberFormat.format(gap * 100)}%.`,
+    summary: `${contacts ? 'Конверсия в контакты' : 'Доля просмотров'} ниже среднего уровня подразделения на ${numberFormat.format(gap * 100)}%.`,
     current: `${num(test.successes)} ${resultLabel} из ${num(test.trials)} ${baseLabel} · ${percent(test.rate)}`,
     comparison: `Остальные объявления: ${percent(test.peerRate)} ${resultLabel} от ${baseLabel}`,
     expected: `При среднем уровне ожидалось около ${numberFormat.format(test.expected)} ${contacts ? 'контакта' : 'просмотра'}.`,

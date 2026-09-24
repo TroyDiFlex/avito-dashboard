@@ -229,6 +229,11 @@ assert.match(
   /% просмотров от показов$/,
   'The comparison rate must explain that it is views divided by impressions.',
 );
+assert.match(
+  portfolioViewGapInsight.summary,
+  /^Доля просмотров ниже среднего уровня подразделения на /,
+  'The summary must use the concise branch-level comparison.',
+);
 
 const peerRows = ['И31', 'Х7', 'Автово'].flatMap((branch, branchIndex) =>
   dates.map((end) =>

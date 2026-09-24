@@ -126,3 +126,30 @@ export function demandForArticle(
     ? { found: true, value: values[key] }
     : { found: false, value: null };
 }
+
+export type DemandLevel = 'low' | 'medium' | 'high' | 'unknown';
+
+export function demandLevel(
+  value: number | null,
+  population: Array<number | null>,
+): DemandLevel {
+  if (value == null || !Number.isFinite(value)) return 'unknown';
+  const values = population.filter(
+    (candidate): candidate is number =>
+      candidate != null && Number.isFinite(candidate),
+  );
+  if (!values.includes(value)) values.push(value);
+  values.sort((left, right) => left - right);
+  if (values.length === 1 || values[0] === values.at(-1)) return 'medium';
+  if (value === values[0]) return 'low';
+  if (value === values.at(-1)) return 'high';
+
+  const lowerCount = values.findIndex((candidate) => candidate >= value);
+  let equalCount = 0;
+  for (let index = lowerCount; values[index] === value; index += 1)
+    equalCount += 1;
+  const percentile = (lowerCount + (equalCount - 1) / 2) / (values.length - 1);
+  if (percentile < 1 / 3) return 'low';
+  if (percentile > 2 / 3) return 'high';
+  return 'medium';
+}

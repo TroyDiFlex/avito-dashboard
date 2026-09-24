@@ -28,7 +28,11 @@ import {
   type InsightKind,
   type InsightTone,
 } from '@/lib/insights';
-import { demandForArticle, normalizeDemandArticle } from '@/lib/demand';
+import {
+  demandForArticle,
+  demandLevel,
+  normalizeDemandArticle,
+} from '@/lib/demand';
 import { extractArticle } from '@/lib/explore';
 import type { AdRow, Snapshot } from '@/lib/model';
 
@@ -229,7 +233,7 @@ export function buildDemandGapInsights(
         tone: 'high' as const,
         article,
         title: `${categoryText ? `Товар категории ${category}` : 'Высокий спрос'}, а результат объявления слабый`,
-        summary: `${priorityText} повышает важность объявления. ${insight.summary}`,
+        summary: insight.summary,
         comparison: `${priorityText}; ${insight.comparison}`,
         sufficiency: `${insight.sufficiency} Приоритет товара взят из загруженной таблицы.`,
         method: `Спрос и категория используются для приоритизации, а не как доказательство причины. Слабый результат подтверждён отдельно: ${insight.method}`,
@@ -265,6 +269,7 @@ function InsightCard({
 }) {
   const url = avitoUrl(insight.listingId);
   const demand = demandForInsight(demandByArticle, categoryByArticle, insight);
+  const demandTone = demandLevel(demand.value, Object.values(demandByArticle));
   const displayedArticle = demand.found ? demand.article : insight.article;
   return (
     <article className={`insight-card tone-${insight.tone}`}>
@@ -279,7 +284,7 @@ function InsightCard({
               </span>
             )}
             {demand.found && (
-              <span className="insight-demand">
+              <span className={`insight-demand demand-${demandTone}`}>
                 Спрос{' '}
                 {demand.value == null
                   ? '—'

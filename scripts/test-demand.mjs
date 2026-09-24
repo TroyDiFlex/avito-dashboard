@@ -12,8 +12,12 @@ const output = ts.transpileModule(source, {
 }).outputText;
 await fs.writeFile('private/compiled/demand.js', output);
 
-const { demandForArticle, normalizeDemandArticle, parseDemandAnalysis } =
-  await import('../private/compiled/demand.js');
+const {
+  demandForArticle,
+  demandLevel,
+  normalizeDemandArticle,
+  parseDemandAnalysis,
+} = await import('../private/compiled/demand.js');
 
 assert.equal(normalizeDemandArticle(' 03l115389hVRN '), '03L115389H');
 assert.equal(normalizeDemandArticle('11428596283'), '11428596283');
@@ -62,5 +66,12 @@ assert.deepEqual(demandForArticle(parsed.values, 'missing'), {
   found: false,
   value: null,
 });
+assert.equal(demandLevel(null, [0, 10, 20]), 'unknown');
+assert.equal(demandLevel(10, [10, 10, 10]), 'medium');
+assert.equal(demandLevel(0, [0, 10, 20, 30, 40]), 'low');
+assert.equal(demandLevel(10, [0, 10, 20, 30, 40]), 'low');
+assert.equal(demandLevel(20, [0, 10, 20, 30, 40]), 'medium');
+assert.equal(demandLevel(30, [0, 10, 20, 30, 40]), 'high');
+assert.equal(demandLevel(40, [0, 10, 20, 30, 40]), 'high');
 
-console.log('Passed: demand table parsing, VRN removal and blank values.');
+console.log('Passed: demand parsing, lookup and relative demand levels.');
