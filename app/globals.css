@@ -688,6 +688,7 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .insight-list-toolbar h2 { margin-top: 2px; font-size: 16px; font-weight: 600; }
 .insight-list-toolbar > div:last-child { display: flex; align-items: center; gap: 10px; }
 .insight-list-toolbar .picker { min-width: 220px; }
+.insight-reason-menu { width: min(520px, calc(100vw - 24px)) !important; max-width: calc(100vw - 24px); }
 .insight-view-switch { display: flex; gap: 3px; padding: 3px; background: #111115; border: 1px solid #25252b; border-radius: 9px; }
 .insight-view-switch button { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; color: #8b8b94; background: transparent; border: 0; border-radius: 6px; font-size: 11px; white-space: nowrap; }
 .insight-view-switch button:hover { color: #d8d8dc; }

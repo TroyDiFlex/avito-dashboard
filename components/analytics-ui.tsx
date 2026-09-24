@@ -25,11 +25,15 @@ export function Picker({
   value,
   items,
   onChange,
+  contentClassName,
+  contentAlign = 'start',
 }: {
   label: string;
   value: string;
   items: Choice[];
   onChange: (value: string) => void;
+  contentClassName?: string;
+  contentAlign?: 'start' | 'center' | 'end';
 }) {
   return (
     <Select
@@ -42,7 +46,7 @@ export function Picker({
       <SelectTrigger className="picker" aria-label={label}>
         <SelectValue />
       </SelectTrigger>
-      <SelectContent align="start">
+      <SelectContent align={contentAlign} className={contentClassName}>
         {items.map((i) => (
           <SelectItem key={i.value} value={i.value}>
             {i.label}

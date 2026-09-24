@@ -740,6 +740,8 @@ export default function Insights({
                 value={effectiveKind}
                 onChange={(value) => changeKind(value as 'all' | InsightKind)}
                 items={kindChoices}
+                contentClassName="insight-reason-menu"
+                contentAlign="end"
               />
             </div>
           </div>
