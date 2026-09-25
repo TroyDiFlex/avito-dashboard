@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Minus, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, Minus, Plus, X } from 'lucide-react';
 import { Chart, Picker } from '@/components/analytics-ui';
 import MultiMetricChart, {
   type MultiMetricMode,
@@ -48,7 +48,7 @@ const GROUPS: { title: string; metrics: Metric[] }[] = [
 
 const ALL_METRICS = GROUPS.flatMap((group) => group.metrics);
 const DEFAULT_COMPARISON_METRICS: Metric[] = ['impressions', 'contacts'];
-const DEFAULT_DETAIL_METRICS = GROUPS[0].metrics;
+const DEFAULT_DETAIL_METRICS: Metric[] = ['impressions', 'contacts', 'spend'];
 const METRIC_COLORS = [
   '#ef3340',
   '#38bdf8',
@@ -347,6 +347,9 @@ function BranchMetrics({
   mode: MultiMetricMode;
   onMetricsChange: (metrics: Metric[]) => void;
 }) {
+  const [expandedGroups, setExpandedGroups] = useState(
+    () => new Set(GROUPS.slice(0, 2).map((group) => group.title)),
+  );
   const history = useMemo(
     () => scopeHistory(snapshot.stats, branch),
     [branch, snapshot],
@@ -397,6 +400,15 @@ function BranchMetrics({
     onMetricsChange(ALL_METRICS.filter((metric) => next.includes(metric)));
   }
 
+  function toggleGroupExpanded(title: string) {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  }
+
   return (
     <div className="metric-workbench">
       <aside className="metric-groups panel">
@@ -411,44 +423,64 @@ function BranchMetrics({
             </button>
           )}
         </header>
-        {GROUPS.map((group) => {
+        {GROUPS.map((group, groupIndex) => {
           const selectedCount = group.metrics.filter((metric) =>
             metrics.includes(metric),
           ).length;
           const allSelected = selectedCount === group.metrics.length;
           const partiallySelected = selectedCount > 0 && !allSelected;
+          const expanded = expandedGroups.has(group.title);
+          const optionsId = `comparison-metric-group-${groupIndex}`;
           return (
-            <section className="metric-group" key={group.title}>
-              <button
-                type="button"
-                className={`metric-group-toggle ${selectedCount ? 'selected' : ''}`}
-                aria-pressed={allSelected}
-                onClick={() => toggleGroup(group.metrics)}
-              >
-                <span className="metric-check" aria-hidden="true">
-                  {allSelected ? (
-                    <Check />
-                  ) : partiallySelected ? (
-                    <Minus />
-                  ) : null}
-                </span>
-                <strong>{group.title}</strong>
-                <small>
-                  {selectedCount}/{group.metrics.length}
-                </small>
-              </button>
-              <div className="metric-options">
-                {group.metrics.map((metric) => (
-                  <label key={metric}>
-                    <input
-                      type="checkbox"
-                      checked={metrics.includes(metric)}
-                      onChange={() => toggleMetric(metric)}
-                    />
-                    <span>{METRICS[metric].label}</span>
-                  </label>
-                ))}
+            <section
+              className={`metric-group ${expanded ? 'expanded' : 'collapsed'}`}
+              key={group.title}
+            >
+              <div className="metric-group-header">
+                <button
+                  type="button"
+                  className={`metric-group-toggle ${selectedCount ? 'selected' : ''}`}
+                  aria-label={`${allSelected ? 'Снять выбор группы' : 'Выбрать группу'} «${group.title}»`}
+                  aria-pressed={allSelected}
+                  onClick={() => toggleGroup(group.metrics)}
+                >
+                  <span className="metric-check" aria-hidden="true">
+                    {allSelected ? (
+                      <Check />
+                    ) : partiallySelected ? (
+                      <Minus />
+                    ) : null}
+                  </span>
+                  <strong>{group.title}</strong>
+                  <small>
+                    {selectedCount}/{group.metrics.length}
+                  </small>
+                </button>
+                <button
+                  type="button"
+                  className="metric-group-disclosure"
+                  aria-label={`${expanded ? 'Свернуть' : 'Развернуть'} группу «${group.title}»`}
+                  aria-expanded={expanded}
+                  aria-controls={optionsId}
+                  onClick={() => toggleGroupExpanded(group.title)}
+                >
+                  <ChevronDown />
+                </button>
               </div>
+              {expanded && (
+                <div className="metric-options" id={optionsId}>
+                  {group.metrics.map((metric) => (
+                    <label key={metric}>
+                      <input
+                        type="checkbox"
+                        checked={metrics.includes(metric)}
+                        onChange={() => toggleMetric(metric)}
+                      />
+                      <span>{METRICS[metric].label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </section>
           );
         })}

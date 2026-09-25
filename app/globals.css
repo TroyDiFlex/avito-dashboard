@@ -517,10 +517,15 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .metric-groups > header > button { color: #777780; background: transparent; border: 0; font-size: 11px; }
 .metric-groups > header > button:hover { color: #fff; }
 .metric-group + .metric-group { border-top: 1px solid #24242a; }
-.metric-group-toggle { width: 100%; min-height: 43px; display: flex; align-items: center; gap: 9px; padding: 7px 14px; color: #9a9aa3; background: #0d0d10; border: 0; text-align: left; }
+.metric-group-header { display: flex; align-items: stretch; background: #0d0d10; }
+.metric-group-toggle { min-width: 0; min-height: 43px; display: flex; align-items: center; flex: 1; gap: 9px; padding: 7px 8px 7px 14px; color: #9a9aa3; background: transparent; border: 0; text-align: left; }
 .metric-group-toggle:hover, .metric-group-toggle.selected { color: #eeeef0; background: #131316; }
 .metric-group-toggle strong { flex: 1; font-size: 12px; font-weight: 600; }
 .metric-group-toggle small { color: #6f6f78; font-size: 10px; font-variant-numeric: tabular-nums; }
+.metric-group-disclosure { width: 38px; display: grid; place-items: center; flex: none; padding: 0; color: #6f6f78; background: transparent; border: 0; }
+.metric-group-disclosure:hover { color: #eeeef0; background: #17171b; }
+.metric-group-disclosure svg { width: 14px; height: 14px; transition: transform var(--motion-base) var(--motion-ease); }
+.metric-group-disclosure[aria-expanded="true"] svg { transform: rotate(180deg); }
 .metric-check { width: 17px; height: 17px; display: grid; place-items: center; flex: none; color: #fff; background: #09090b; border: 1px solid #34343c; border-radius: 5px; }
 .metric-group-toggle.selected .metric-check { background: #d92734; border-color: #ef3340; }
 .metric-check svg { width: 12px; height: 12px; stroke-width: 2.5; }
@@ -539,6 +544,10 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .multi-metric-chart { height: 520px; padding-top: 6px; }
 .metric-workbench .multi-metric-chart { min-height: 300px; height: auto; flex: 1; }
 .metric-workbench .metric-overlay-panel > .empty-chart { flex: 1; }
+.comparison-page .metric-workbench { align-items: start; }
+.comparison-page .metric-overlay-panel { width: 100%; align-self: start; }
+.comparison-page .metric-workbench .multi-metric-chart { min-height: 0; height: 420px; flex: none; }
+.comparison-page .metric-workbench .metric-overlay-panel > .empty-chart { min-height: 420px; flex: none; }
 .multi-metric-tooltip { min-width: 235px; display: grid; gap: 7px; padding: 11px 12px; color: #f3f5f7; background: #202831; border: 1px solid #3c4955; border-radius: 12px; box-shadow: 0 14px 34px rgba(0, 0, 0, .28); font-size: 11px; }
 .multi-metric-tooltip > strong { margin-bottom: 2px; color: #aeb8c1; font-size: 11px; font-weight: 600; }
 .multi-metric-tooltip span { display: grid; grid-template-columns: 8px minmax(105px, 1fr) auto; align-items: center; gap: 6px; }
