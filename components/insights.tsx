@@ -356,13 +356,17 @@ export function buildDemandGapInsights(
 function InsightCard({
   insight,
   onOpenPart,
+  onOpenPartMetrics,
   getPartHref,
+  getPartMetricsHref,
   demandByArticle,
   categoryByArticle,
 }: {
   insight: Insight;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  onOpenPartMetrics: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
+  getPartMetricsHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
   demandByArticle: Record<string, number | null>;
   categoryByArticle: Record<string, string | null>;
 }) {
@@ -418,29 +422,54 @@ function InsightCard({
                 </a>
               )}
               {insight.listingId && (
-                <a
-                  href={getPartHref({
-                    branch: insight.branch,
-                    id: insight.listingId,
-                  })}
-                  onClick={(event) => {
-                    if (
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey
-                    )
-                      return;
-                    event.preventDefault();
-                    onOpenPart({
+                <>
+                  <a
+                    href={getPartHref({
                       branch: insight.branch,
-                      id: insight.listingId!,
-                    });
-                  }}
-                >
-                  <ChartNoAxesCombined />
-                  Сравнить подразделения
-                </a>
+                      id: insight.listingId,
+                    })}
+                    onClick={(event) => {
+                      if (
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      onOpenPart({
+                        branch: insight.branch,
+                        id: insight.listingId!,
+                      });
+                    }}
+                  >
+                    <ChartNoAxesCombined />
+                    Сравнить подразделения
+                  </a>
+                  <a
+                    href={getPartMetricsHref({
+                      branch: insight.branch,
+                      id: insight.listingId,
+                    })}
+                    onClick={(event) => {
+                      if (
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      onOpenPartMetrics({
+                        branch: insight.branch,
+                        id: insight.listingId!,
+                      });
+                    }}
+                  >
+                    <Eye />
+                    Посмотреть показатели
+                  </a>
+                </>
               )}
             </div>
           </div>
@@ -497,7 +526,9 @@ export default function Insights({
   availableBranches,
   initialBranch,
   onOpenPart,
+  onOpenPartMetrics,
   getPartHref,
+  getPartMetricsHref,
   demandByArticle,
   categoryByArticle,
 }: {
@@ -507,7 +538,9 @@ export default function Insights({
   availableBranches: string[];
   initialBranch: string;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  onOpenPartMetrics: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
+  getPartMetricsHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
   demandByArticle: Record<string, number | null>;
   categoryByArticle: Record<string, string | null>;
 }) {
@@ -787,7 +820,9 @@ export default function Insights({
                   key={insight.id}
                   insight={insight}
                   onOpenPart={onOpenPart}
+                  onOpenPartMetrics={onOpenPartMetrics}
                   getPartHref={getPartHref}
+                  getPartMetricsHref={getPartMetricsHref}
                   demandByArticle={demandByArticle}
                   categoryByArticle={categoryByArticle}
                 />

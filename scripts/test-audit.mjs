@@ -193,6 +193,13 @@ const insightsHtml = renderToStaticMarkup(
     demandByArticle: { 11128507607: 66 },
     categoryByArticle: { 11128507607: 'A' },
     onOpenPart() {},
+    onOpenPartMetrics() {},
+    getPartHref() {
+      return '/?partsScope=network';
+    },
+    getPartMetricsHref(ad) {
+      return `/?partsScope=${encodeURIComponent(ad.branch)}`;
+    },
   }),
 );
 assert.ok(insightsHtml.includes('Точки роста'));
@@ -205,6 +212,8 @@ assert.ok(!insightsHtml.includes('Что проверить'));
 assert.ok(insightsHtml.includes('Спрос'));
 assert.ok(insightsHtml.includes('66'));
 assert.ok(insightsHtml.includes('Категория A'));
+assert.ok(insightsHtml.includes('Сравнить подразделения'));
+assert.ok(insightsHtml.includes('Посмотреть показатели'));
 assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
 console.log(
   'Passed: insights, sufficiency explanations and demo signals render.',

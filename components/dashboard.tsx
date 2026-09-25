@@ -316,12 +316,13 @@ export default function Dashboard() {
     ad: { branch: string; id: string },
     metric?: Metric,
     preservePartFilters = false,
+    scope = 'network',
   ) {
     return dashboardUrl({
       tab: 'parts',
       partBranch: ad.branch,
       partId: ad.id,
-      ...(preservePartFilters ? {} : { partsScope: 'network' }),
+      ...(preservePartFilters ? {} : { partsScope: scope }),
       ...(metric ? { partsMetric: metric, partsMetrics: metric } : {}),
     });
   }
@@ -330,6 +331,7 @@ export default function Dashboard() {
     ad: { branch: string; id: string },
     sourceTab: 'insights' | 'parts' | 'ads',
     metric?: Metric,
+    scope = 'network',
   ) {
     const currentState = currentHistoryState();
     window.history.replaceState(
@@ -354,7 +356,7 @@ export default function Dashboard() {
         },
       },
       '',
-      partHref(ad, metric, sourceTab === 'parts'),
+      partHref(ad, metric, sourceTab === 'parts', scope),
     );
     setPartTarget(ad);
     setTab('parts');
@@ -889,7 +891,13 @@ export default function Dashboard() {
                   demandByArticle={demandAnalysis.values}
                   categoryByArticle={demandAnalysis.categories}
                   onOpenPart={(ad) => openPart(ad, 'insights')}
+                  onOpenPartMetrics={(ad) =>
+                    openPart(ad, 'insights', undefined, ad.branch)
+                  }
                   getPartHref={(ad) => partHref(ad)}
+                  getPartMetricsHref={(ad) =>
+                    partHref(ad, undefined, false, ad.branch)
+                  }
                 />
               )}
               {tab === 'parts' && (
