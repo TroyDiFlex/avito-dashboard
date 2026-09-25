@@ -57,7 +57,8 @@ export default function MultiMetricChart({
   series: MultiMetricSeries[];
   mode: MultiMetricMode;
 }) {
-  const [activeMetric, setActiveMetric] = useState<Metric | null>(null);
+  const [pinnedMetric, setPinnedMetric] = useState<Metric | null>(null);
+  const [hoveredMetric, setHoveredMetric] = useState<Metric | null>(null);
   const domains = useMemo(
     () =>
       Object.fromEntries(
@@ -80,10 +81,16 @@ export default function MultiMetricChart({
     [domains, mode, series],
   );
   const selectedMetric = usableSeries.some(
-    (item) => item.metric === activeMetric,
+    (item) => item.metric === pinnedMetric,
   )
-    ? activeMetric!
+    ? pinnedMetric!
     : usableSeries[0]?.metric;
+  const highlightedMetric = usableSeries.some(
+    (item) => item.metric === hoveredMetric,
+  )
+    ? hoveredMetric
+    : null;
+  const scaleMetric = highlightedMetric ?? selectedMetric;
   const prepared = useMemo(
     () =>
       data.map((row) => {
@@ -114,7 +121,7 @@ export default function MultiMetricChart({
         )
       : [];
   const medianExtent = paddedDomain([...medianValues, 100]);
-  const activeDomain = selectedMetric ? domains[selectedMetric] : null;
+  const activeDomain = scaleMetric ? domains[scaleMetric] : null;
   const skipped = series.filter(
     (item) => mode === 'median' && (item.median == null || item.median <= 0),
   );
@@ -130,15 +137,20 @@ export default function MultiMetricChart({
 
   return (
     <>
-      <div className="metric-chart-legend" aria-label="Показатели графика">
+      <div
+        className="metric-chart-legend"
+        aria-label="Показатели графика"
+        onMouseLeave={() => setHoveredMetric(null)}
+      >
         {usableSeries.map((item) => (
           <button
             key={item.metric}
             type="button"
             className={selectedMetric === item.metric ? 'active' : ''}
             aria-pressed={selectedMetric === item.metric}
-            onClick={() => setActiveMetric(item.metric)}
-            onMouseEnter={() => setActiveMetric(item.metric)}
+            onClick={() => setPinnedMetric(item.metric)}
+            onMouseEnter={() => setHoveredMetric(item.metric)}
+            onMouseLeave={() => setHoveredMetric(null)}
           >
             <i style={{ background: item.color }} />
             <span>{METRICS[item.metric].label}</span>
@@ -158,7 +170,6 @@ export default function MultiMetricChart({
           <LineChart
             data={prepared}
             margin={{ top: 14, right: 20, bottom: 4, left: 14 }}
-            onMouseLeave={() => setActiveMetric(null)}
           >
             <CartesianGrid
               stroke="#2a3239"
@@ -183,12 +194,12 @@ export default function MultiMetricChart({
               }
               tickFormatter={(value) => {
                 if (mode === 'median') return `${Math.round(Number(value))}%`;
-                if (!selectedMetric || !activeDomain) return '';
+                if (!scaleMetric || !activeDomain) return '';
                 const raw =
                   activeDomain.low +
                   (Number(value) / 100) *
                     (activeDomain.high - activeDomain.low);
-                return format(raw, selectedMetric, true);
+                return format(raw, scaleMetric, true);
               }}
               tick={{ fill: '#99a5af', fontSize: 12 }}
               axisLine={false}
@@ -241,7 +252,8 @@ export default function MultiMetricChart({
               }}
             />
             {usableSeries.map((item) => {
-              const highlighted = !activeMetric || activeMetric === item.metric;
+              const highlighted =
+                !highlightedMetric || highlightedMetric === item.metric;
               return (
                 <Line
                   key={item.metric}
