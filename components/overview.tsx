@@ -49,7 +49,7 @@ function branchColumnWidth(branchCount: number, share: number) {
 
 function resultColumnShares(dateCount: number) {
   if (dateCount === 2) return { dates: [0.36, 0.3], delta: 0.34 };
-  const delta = 0.28;
+  const delta = dateCount >= 4 ? 0.24 : 0.28;
   return {
     dates: Array.from({ length: dateCount }, () => (1 - delta) / dateCount),
     delta,
@@ -200,7 +200,7 @@ export default function Overview({
   const previous = latest ? shiftDate(latest, -7) : '';
   const effectiveBranch = branches.includes(branch) ? branch : (branches[0] ?? branch);
   const effectiveTableMode: TableMode = branches.length === 1 ? 'history' : tableMode;
-  const resultWeekCount = branches.length === 2 ? 3 : 2;
+  const resultWeekCount = branches.length === 2 ? 4 : 2;
   const resultDates = latest
     ? Array.from({ length: resultWeekCount }, (_, index) =>
         shiftDate(latest, (index - resultWeekCount + 1) * 7),
@@ -405,6 +405,12 @@ export default function Overview({
                 <tr>
                   <th>Показатель</th>
                   {historyDates.map((date) => <th key={date}>{shortDate(date)}</th>)}
+                  <th
+                    className="history-latest-delta"
+                    aria-label="Изменение последней недели к предыдущей"
+                  >
+                    Δ
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -538,9 +544,11 @@ function HistoryRows({
   selectedMetric: Metric;
   onMetricChange: (metric: Metric) => void;
 }) {
+  const latest = dates.at(-1) ?? '';
+  const previous = latest ? shiftDate(latest, -7) : '';
   return (
     <>
-      <tr className="history-group"><th colSpan={dates.length + 1}>{title}</th></tr>
+      <tr className="history-group"><th colSpan={dates.length + 2}>{title}</th></tr>
       {metrics.map((metric) => (
         <tr
           key={metric}
@@ -548,16 +556,34 @@ function HistoryRows({
           onClick={() => onMetricChange(metric)}
         >
           <th><button type="button">{METRICS[metric].label}</button></th>
-          {dates.map((date) => {
+          {dates.map((date, index) => {
             const current = rowAt(rows, date)?.metrics[metric];
             const before = rowAt(rows, shiftDate(date, -7))?.metrics[metric];
             return (
-              <td key={date} className="history-value-cell">
-                <span className="history-value">{format(current, metric)}</span>
-                <MetricDelta current={current} previous={before} metric={metric} />
+              <td
+                key={date}
+                className={`history-value-cell${index === dates.length - 1 ? ' history-latest-week' : ''}`}
+                aria-label={`${shortDate(date)}: ${format(current, metric)}`}
+              >
+                <span className="history-week-content">
+                  <span className="history-value">{format(current, metric)}</span>
+                  <span className="history-inline-delta">
+                    <MetricDelta current={current} previous={before} metric={metric} />
+                  </span>
+                </span>
               </td>
             );
           })}
+          <td
+            className="history-latest-delta"
+            aria-label="Изменение последней недели к предыдущей"
+          >
+            <MetricDelta
+              current={rowAt(rows, latest)?.metrics[metric]}
+              previous={rowAt(rows, previous)?.metrics[metric]}
+              metric={metric}
+            />
+          </td>
         </tr>
       ))}
     </>
