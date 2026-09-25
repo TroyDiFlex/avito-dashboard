@@ -47,20 +47,33 @@ function branchColumnWidth(branchCount: number, share: number) {
   return `calc(${(share * 100) / branchCount}% - ${(METRIC_COLUMN_WIDTH * share) / branchCount}px)`;
 }
 
-function ResultsTableHeader({ branches, previous, latest }: {
+function resultColumnShares(dateCount: number) {
+  if (dateCount === 2) return { dates: [0.36, 0.3], delta: 0.34 };
+  const delta = 0.28;
+  return {
+    dates: Array.from({ length: dateCount }, () => (1 - delta) / dateCount),
+    delta,
+  };
+}
+
+function ResultsTableHeader({ branches, dates }: {
   branches: string[];
-  previous: string;
-  latest: string;
+  dates: string[];
 }) {
+  const shares = resultColumnShares(dates.length);
   return (
     <>
       <colgroup>
         <col style={{ width: METRIC_COLUMN_WIDTH }} />
         {branches.map((name) => (
           <Fragment key={name}>
-            <col style={{ width: branchColumnWidth(branches.length, 0.36) }} />
-            <col style={{ width: branchColumnWidth(branches.length, 0.3) }} />
-            <col style={{ width: branchColumnWidth(branches.length, 0.34) }} />
+            {shares.dates.map((share, index) => (
+              <col
+                key={`${name}:date:${index}`}
+                style={{ width: branchColumnWidth(branches.length, share) }}
+              />
+            ))}
+            <col style={{ width: branchColumnWidth(branches.length, shares.delta) }} />
           </Fragment>
         ))}
       </colgroup>
@@ -68,7 +81,7 @@ function ResultsTableHeader({ branches, previous, latest }: {
         <tr className="matrix-branch-row">
           <th rowSpan={2}>Показатель</th>
           {branches.map((name) => (
-            <th key={name} colSpan={3}>
+            <th key={name} colSpan={dates.length + 1}>
               <span className="matrix-branch-title">
                 <i style={{ background: BRANCH_COLORS[name] }} />
                 {name}
@@ -78,9 +91,21 @@ function ResultsTableHeader({ branches, previous, latest }: {
         </tr>
         <tr className="matrix-week-row">
           {branches.flatMap((name) => [
-            <th key={`${name}:${previous}`} className="previous-week">{shortDate(previous)}</th>,
-            <th key={`${name}:${latest}`} className="current-week">{shortDate(latest)}</th>,
-            <th key={`${name}:delta`} className="delta-week" aria-label="Изменение">Δ</th>,
+            ...dates.map((date, index) => (
+              <th
+                key={`${name}:${date}`}
+                className={`${index === dates.length - 1 ? 'current-week' : 'previous-week'}${index === 0 ? ' branch-start' : ''}`}
+              >
+                {shortDate(date)}
+              </th>
+            )),
+            <th
+              key={`${name}:delta`}
+              className="delta-week branch-end"
+              aria-label="Изменение последней недели к предыдущей"
+            >
+              Δ
+            </th>,
           ])}
         </tr>
       </thead>
@@ -173,16 +198,24 @@ export default function Overview({
   ].sort();
   const latest = visibleDates.at(-1) ?? '';
   const previous = latest ? shiftDate(latest, -7) : '';
-  const focusRows = histories[branch] ?? histories[branches[0]] ?? [];
+  const effectiveBranch = branches.includes(branch) ? branch : (branches[0] ?? branch);
+  const effectiveTableMode: TableMode = branches.length === 1 ? 'history' : tableMode;
+  const resultWeekCount = branches.length === 2 ? 3 : 2;
+  const resultDates = latest
+    ? Array.from({ length: resultWeekCount }, (_, index) =>
+        shiftDate(latest, (index - resultWeekCount + 1) * 7),
+      )
+    : [];
+  const focusRows = histories[effectiveBranch] ?? [];
   const historyDates = focusRows
     .map((row) => row.end)
     .filter((date) => date >= from && date <= to)
     .sort()
     .slice(-8);
-  const chartBranches = tableMode === 'results' ? branches : [branch];
+  const chartBranches = effectiveTableMode === 'results' ? branches : [effectiveBranch];
   const chartData = useMemo(() => {
     const rowsByDate = new Map<string, Record<string, unknown>>();
-    for (const name of tableMode === 'results' ? branches : [branch]) {
+    for (const name of effectiveTableMode === 'results' ? branches : [effectiveBranch]) {
       for (const point of timeSeries(histories[name] ?? [], metric, 'week', from, to)) {
         const row = rowsByDate.get(point.date) ?? { date: point.date };
         row[name] = point.value;
@@ -192,7 +225,7 @@ export default function Overview({
     return [...rowsByDate.values()].sort((a, b) =>
       String(a.date).localeCompare(String(b.date)),
     );
-  }, [branch, branches, from, histories, metric, tableMode, to]);
+  }, [branches, effectiveBranch, effectiveTableMode, from, histories, metric, to]);
   const metricChoices = ALL_METRICS.map((value) => ({
     value,
     label: METRICS[value].label,
@@ -203,7 +236,7 @@ export default function Overview({
   );
 
   useEffect(() => {
-    if (tableMode !== 'results') return;
+    if (effectiveTableMode !== 'results') return;
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
@@ -229,7 +262,7 @@ export default function Overview({
       window.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
     };
-  }, [tableMode]);
+  }, [effectiveTableMode]);
 
   useEffect(() => {
     if (!showStickyHeader || !stickyTableRef.current) return;
@@ -263,7 +296,7 @@ export default function Overview({
 
   return (
     <div className="overview-page">
-      {showStickyHeader && tableMode === 'results' && createPortal(
+      {showStickyHeader && effectiveTableMode === 'results' && createPortal(
         <header className="overview-sticky-header">
           <div className="overview-sticky-inner">
             <div className="overview-sticky-meta">
@@ -284,7 +317,7 @@ export default function Overview({
                 className="metrics-matrix sticky-metrics-matrix"
                 style={{ minWidth: resultsTableMinWidth }}
               >
-                <ResultsTableHeader branches={branches} previous={previous} latest={latest} />
+                <ResultsTableHeader branches={branches} dates={resultDates} />
               </table>
             </div>
           </div>
@@ -307,46 +340,48 @@ export default function Overview({
       <section className="matrix-panel overview-table-panel">
         <div className="section-heading overview-table-heading">
           <h2>
-            {tableMode === 'results'
+            {effectiveTableMode === 'results'
               ? 'Результаты подразделений'
-              : `История · ${branch}`}
+              : `История · ${effectiveBranch}`}
           </h2>
-          <div
-            className="branch-tabs overview-branch-tabs"
-            role="tablist"
-            aria-label="Подразделение"
-          >
-            <button
-              role="tab"
-              aria-selected={tableMode === 'results'}
-              aria-label="Все подразделения"
-              className={tableMode === 'results' ? 'active' : ''}
-              onClick={() => setTableMode('results')}
+          {branches.length > 1 && (
+            <div
+              className="branch-tabs overview-branch-tabs"
+              role="tablist"
+              aria-label="Подразделение"
             >
-              Все
-            </button>
-            {branches.map((name) => (
               <button
-                key={name}
                 role="tab"
-                aria-selected={tableMode === 'history' && name === branch}
-                className={tableMode === 'history' && name === branch ? 'active' : ''}
-                onClick={() => openBranch(name)}
+                aria-selected={effectiveTableMode === 'results'}
+                aria-label="Все подразделения"
+                className={effectiveTableMode === 'results' ? 'active' : ''}
+                onClick={() => setTableMode('results')}
               >
-                <i style={{ background: BRANCH_COLORS[name] }} />
-                {name}
+                Все
               </button>
-            ))}
-          </div>
+              {branches.map((name) => (
+                <button
+                  key={name}
+                  role="tab"
+                  aria-selected={effectiveTableMode === 'history' && name === effectiveBranch}
+                  className={effectiveTableMode === 'history' && name === effectiveBranch ? 'active' : ''}
+                  onClick={() => openBranch(name)}
+                >
+                  <i style={{ background: BRANCH_COLORS[name] }} />
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        {tableMode === 'results' ? (
+        {effectiveTableMode === 'results' ? (
           <div className="matrix-scroll" ref={matrixScrollRef} onScroll={syncStickyHeader}>
             <table
               ref={resultsTableRef}
               className="metrics-matrix"
               style={{ minWidth: resultsTableMinWidth }}
             >
-              <ResultsTableHeader branches={branches} previous={previous} latest={latest} />
+              <ResultsTableHeader branches={branches} dates={resultDates} />
               <tbody>
                 {GROUPS.map((group) => (
                   <GroupRows
@@ -354,8 +389,7 @@ export default function Overview({
                     title={group.title}
                     metrics={group.metrics}
                     histories={histories}
-                    latest={latest}
-                    previous={previous}
+                    dates={resultDates}
                     onMetricChange={selectMetricAndReveal}
                     selectedMetric={metric}
                     branches={branches}
@@ -395,7 +429,7 @@ export default function Overview({
         <div className="section-heading">
           <div>
             <span className="branch-title">
-              {tableMode === 'results' ? (
+              {effectiveTableMode === 'results' ? (
                 <>
                   <span className="branch-dot-stack" aria-hidden="true">
                     {branches.map((name) => (
@@ -406,7 +440,7 @@ export default function Overview({
                 </>
               ) : (
                 <>
-                  <i style={{ background: BRANCH_COLORS[branch] }} />{branch}
+                  <i style={{ background: BRANCH_COLORS[effectiveBranch] }} />{effectiveBranch}
                 </>
               )}
             </span>
@@ -437,8 +471,7 @@ function GroupRows({
   title,
   metrics,
   histories,
-  latest,
-  previous,
+  dates,
   selectedMetric,
   onMetricChange,
   branches,
@@ -446,15 +479,18 @@ function GroupRows({
   title: string;
   metrics: Metric[];
   histories: Record<string, StatRow[]>;
-  latest: string;
-  previous: string;
+  dates: string[];
   selectedMetric: Metric;
   onMetricChange: (metric: Metric) => void;
   branches: string[];
 }) {
+  const latest = dates.at(-1) ?? '';
+  const previous = dates.at(-2) ?? '';
   return (
     <>
-      <tr className="matrix-group"><th colSpan={branches.length * 3 + 1}>{title}</th></tr>
+      <tr className="matrix-group">
+        <th colSpan={branches.length * (dates.length + 1) + 1}>{title}</th>
+      </tr>
       {metrics.map((metric) => (
         <tr
           key={metric}
@@ -467,9 +503,15 @@ function GroupRows({
             const before = rowAt(histories[name], previous)?.metrics[metric];
             return (
               <Fragment key={name}>
-                <td className="previous-week"><strong>{format(before, metric)}</strong></td>
-                <td className="current-week"><strong>{format(current, metric)}</strong></td>
-                <td className="delta-week">
+                {dates.map((date, index) => (
+                  <td
+                    key={date}
+                    className={`${index === dates.length - 1 ? 'current-week' : 'previous-week'}${index === 0 ? ' branch-start' : ''}`}
+                  >
+                    <strong>{format(rowAt(histories[name], date)?.metrics[metric], metric)}</strong>
+                  </td>
+                ))}
+                <td className="delta-week branch-end">
                   <MetricDelta current={current} previous={before} metric={metric} />
                 </td>
               </Fragment>
@@ -506,9 +548,16 @@ function HistoryRows({
           onClick={() => onMetricChange(metric)}
         >
           <th><button type="button">{METRICS[metric].label}</button></th>
-          {dates.map((date) => (
-            <td key={date}>{format(rowAt(rows, date)?.metrics[metric], metric)}</td>
-          ))}
+          {dates.map((date) => {
+            const current = rowAt(rows, date)?.metrics[metric];
+            const before = rowAt(rows, shiftDate(date, -7))?.metrics[metric];
+            return (
+              <td key={date} className="history-value-cell">
+                <span className="history-value">{format(current, metric)}</span>
+                <MetricDelta current={current} previous={before} metric={metric} />
+              </td>
+            );
+          })}
         </tr>
       ))}
     </>
