@@ -42,12 +42,17 @@ import { adKey, extractArticle, recentMetricMedian } from '@/lib/explore';
 const PARTS_FILTERS_KEY = 'pik-parts-filters';
 const PART_AD_METRICS: Metric[] = [...AD_METRICS, 'contactPriceShare'];
 const PART_METRICS: Metric[] = ['price', ...PART_AD_METRICS];
-const PART_METRIC_GROUPS: { title: string; metrics: Metric[] }[] = [
-  { title: 'Объявление', metrics: ['price'] },
+type PartDetailMetric = Metric | 'name';
+const PART_DETAIL_METRICS: PartDetailMetric[] = ['name', ...PART_METRICS];
+const PART_METRIC_GROUPS: {
+  title: string;
+  metrics: PartDetailMetric[];
+}[] = [
+  { title: 'Объявление', metrics: ['name', 'price'] },
   { title: 'Воронка и реклама', metrics: PART_AD_METRICS },
 ];
 const DEFAULT_COMPARISON_METRICS: Metric[] = ['contacts'];
-const DEFAULT_DETAIL_METRICS = PART_METRICS;
+const DEFAULT_DETAIL_METRICS: PartDetailMetric[] = PART_METRICS;
 const METRIC_COLORS = [
   '#ef3340',
   '#38bdf8',
@@ -67,6 +72,17 @@ const metricChoices = PART_METRICS.map((value) => ({
 
 function isPartMetric(value: unknown): value is Metric {
   return typeof value === 'string' && PART_METRICS.includes(value as Metric);
+}
+
+function isPartDetailMetric(value: unknown): value is PartDetailMetric {
+  return (
+    value === 'name' ||
+    (typeof value === 'string' && PART_METRICS.includes(value as Metric))
+  );
+}
+
+function detailMetricLabel(metric: PartDetailMetric) {
+  return metric === 'name' ? 'Название объявления' : METRICS[metric].label;
 }
 
 function validMetrics(
@@ -93,6 +109,24 @@ function metricsFromUrl(
   const raw = params.get(key) ?? '';
   const values = raw === 'none' ? [] : raw.split(',');
   return validMetrics(values, [], limit, allowEmpty);
+}
+
+function detailMetricsFromUrl(params: URLSearchParams, key: string) {
+  if (!params.has(key)) return null;
+  const raw = params.get(key) ?? '';
+  if (raw === 'none') return [];
+  return [
+    ...new Set(raw.split(',').filter(isPartDetailMetric)),
+  ] as PartDetailMetric[];
+}
+
+function validDetailMetrics(
+  value: unknown,
+  fallback: PartDetailMetric[],
+): PartDetailMetric[] {
+  if (!Array.isArray(value)) return fallback;
+  const metrics = [...new Set(value.filter(isPartDetailMetric))];
+  return metrics.length || value.length === 0 ? metrics : fallback;
 }
 
 function initialPartFilters(initialScope: string, availableBranches: string[]) {
@@ -122,12 +156,7 @@ function initialPartFilters(initialScope: string, availableBranches: string[]) {
       ? stored.metric
       : fallback.metric;
   const urlComparisonMetrics = metricsFromUrl(params, 'partsMetrics', 4);
-  const urlDetailMetrics = metricsFromUrl(
-    params,
-    'partsDetailMetrics',
-    undefined,
-    true,
-  );
+  const urlDetailMetrics = detailMetricsFromUrl(params, 'partsDetailMetrics');
   const urlDetailMode = params.get('partsMode');
   const urlNormalized = params.get('partsNormalized');
   return {
@@ -144,12 +173,7 @@ function initialPartFilters(initialScope: string, availableBranches: string[]) {
         : validMetrics(stored.comparisonMetrics, [metric], 4)),
     detailMetrics:
       urlDetailMetrics ??
-      validMetrics(
-        stored.detailMetrics,
-        DEFAULT_DETAIL_METRICS,
-        undefined,
-        true,
-      ),
+      validDetailMetrics(stored.detailMetrics, DEFAULT_DETAIL_METRICS),
     allNormalized:
       urlNormalized === '1' ||
       (urlNormalized === null && stored.allNormalized === true),
@@ -176,7 +200,7 @@ type Part = {
 type Account = {
   branch: string;
   listings: Listing[];
-  rows: { end: string; metrics: Metrics }[];
+  rows: { end: string; name: string; metrics: Metrics }[];
 };
 
 function buildParts(snapshot: Snapshot): Part[] {
@@ -292,6 +316,15 @@ function accountsFor(part: Part, from: string, to: string): Account[] {
         const rows = listings.flatMap((listing) =>
           listing.rows.filter((row) => row.end === end),
         );
+        const name =
+          listings
+            .map((listing) =>
+              listing.rows.find(
+                (row) => row.end === end && row.name.trim().length > 0,
+              ),
+            )
+            .find((row) => row != null)
+            ?.name.trim() ?? '';
         const metrics: Metrics = {};
         PART_METRICS.forEach((metric) => {
           if (metric === 'contactPriceShare') return;
@@ -311,7 +344,7 @@ function accountsFor(part: Part, from: string, to: string): Account[] {
           metrics.contacts,
           metrics.price,
         );
-        return { end, metrics };
+        return { end, name, metrics };
       }),
     };
   });
@@ -358,7 +391,7 @@ export default function PartExplorer({
   const [comparisonMetrics, setComparisonMetrics] = useState<Metric[]>(
     initial.comparisonMetrics,
   );
-  const [detailMetrics, setDetailMetrics] = useState<Metric[]>(
+  const [detailMetrics, setDetailMetrics] = useState<PartDetailMetric[]>(
     initial.detailMetrics,
   );
   const [allNormalized, setAllNormalized] = useState(initial.allNormalized);
@@ -605,12 +638,12 @@ function PartDetail({
   scope: string;
   availableBranches: string[];
   comparisonMetrics: Metric[];
-  detailMetrics: Metric[];
+  detailMetrics: PartDetailMetric[];
   allNormalized: boolean;
   detailMode: MultiMetricMode;
   onScopeChange: (scope: string) => void;
   onComparisonMetricsChange: (metrics: Metric[]) => void;
-  onDetailMetricsChange: (metrics: Metric[]) => void;
+  onDetailMetricsChange: (metrics: PartDetailMetric[]) => void;
   onAllNormalizedChange: (value: boolean) => void;
   onDetailModeChange: (mode: MultiMetricMode) => void;
   onBack: () => void;
@@ -631,6 +664,7 @@ function PartDetail({
     effectiveScope === 'network'
       ? null
       : (accounts.find((account) => account.branch === effectiveScope) ?? null);
+  const hasNumericDetailMetrics = detailMetrics.some(isPartMetric);
   const primaryListings = part.listings.filter(
     (listing) =>
       listing.primary && availableBranches.includes(listing.latest.branch),
@@ -770,44 +804,48 @@ function PartDetail({
           <p>
             {effectiveScope === 'network'
               ? 'До четырёх показателей; каждый график сравнивает подразделения.'
-              : detailMode === 'median'
-                ? '100% — медиана последних 12 доступных недель. Пропуски не считаются нулями.'
-                : 'Каждая линия использует собственную шкалу; сравнивайте направление и моменты изменений.'}
+              : !hasNumericDetailMetrics && detailMetrics.includes('name')
+                ? 'Показаны периоды и моменты изменения названия объявления.'
+                : detailMode === 'median'
+                  ? '100% — медиана последних 12 доступных недель. Пропуски не считаются нулями.'
+                  : 'Каждая линия использует собственную шкалу; сравнивайте направление и моменты изменений.'}
           </p>
         </div>
-        <div className="comparison-actions">
-          {effectiveScope === 'network' ? (
-            <>
-              <button
-                className={`mode-button ${!allNormalized ? 'active' : ''}`}
-                onClick={() => onAllNormalizedChange(false)}
-              >
-                Значения
-              </button>
-              <button
-                className={`mode-button ${allNormalized ? 'active' : ''}`}
-                onClick={() => onAllNormalizedChange(true)}
-              >
-                Относительно нормы
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className={`mode-button ${detailMode === 'median' ? 'active' : ''}`}
-                onClick={() => onDetailModeChange('median')}
-              >
-                Относительно нормы
-              </button>
-              <button
-                className={`mode-button ${detailMode === 'own' ? 'active' : ''}`}
-                onClick={() => onDetailModeChange('own')}
-              >
-                Свои шкалы
-              </button>
-            </>
-          )}
-        </div>
+        {(effectiveScope === 'network' || hasNumericDetailMetrics) && (
+          <div className="comparison-actions">
+            {effectiveScope === 'network' ? (
+              <>
+                <button
+                  className={`mode-button ${!allNormalized ? 'active' : ''}`}
+                  onClick={() => onAllNormalizedChange(false)}
+                >
+                  Значения
+                </button>
+                <button
+                  className={`mode-button ${allNormalized ? 'active' : ''}`}
+                  onClick={() => onAllNormalizedChange(true)}
+                >
+                  Относительно нормы
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className={`mode-button ${detailMode === 'median' ? 'active' : ''}`}
+                  onClick={() => onDetailModeChange('median')}
+                >
+                  Относительно нормы
+                </button>
+                <button
+                  className={`mode-button ${detailMode === 'own' ? 'active' : ''}`}
+                  onClick={() => onDetailModeChange('own')}
+                >
+                  Свои шкалы
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       <section
@@ -1021,6 +1059,73 @@ function PartMetricChart({
   );
 }
 
+function ListingNameHistory({
+  rows,
+  fill,
+}: {
+  rows: Account['rows'];
+  fill: boolean;
+}) {
+  const periods = rows.reduce<
+    { name: string; from: string; to: string; count: number }[]
+  >((result, row) => {
+    if (!row.name) return result;
+    const previous = result.at(-1);
+    if (previous?.name === row.name) {
+      previous.to = row.end;
+      previous.count += 1;
+    } else {
+      result.push({ name: row.name, from: row.end, to: row.end, count: 1 });
+    }
+    return result;
+  }, []);
+
+  if (!periods.length) {
+    return (
+      <div className={`listing-name-history empty${fill ? ' fill' : ''}`}>
+        Названия за выбранный период отсутствуют.
+      </div>
+    );
+  }
+
+  return (
+    <figure
+      className={`listing-name-history${fill ? ' fill' : ''}`}
+      aria-label="История названия объявления"
+    >
+      <figcaption>
+        <span>Название объявления</span>
+        <small>
+          {periods.length === 1
+            ? 'Без изменений'
+            : `Изменений: ${periods.length - 1}`}
+        </small>
+      </figcaption>
+      <div className="listing-name-track">
+        {periods.map((period, index) => (
+          <div
+            key={`${period.from}:${period.name}`}
+            className="listing-name-period"
+            style={{ flexGrow: period.count }}
+            title={`${period.name} · ${shortDate(period.from)}${period.from === period.to ? '' : ` — ${shortDate(period.to)}`}`}
+          >
+            <i
+              style={{
+                background: METRIC_COLORS[index % METRIC_COLORS.length],
+              }}
+            />
+            <span>{period.name}</span>
+            <small>
+              {shortDate(period.from)}
+              {period.from !== period.to && ` — ${shortDate(period.to)}`}
+            </small>
+          </div>
+        ))}
+      </div>
+    </figure>
+  );
+}
+
 function PartBranchMetrics({
   account,
   to,
@@ -1030,15 +1135,17 @@ function PartBranchMetrics({
 }: {
   account: Account;
   to: string;
-  metrics: Metric[];
+  metrics: PartDetailMetric[];
   mode: MultiMetricMode;
-  onMetricsChange: (metrics: Metric[]) => void;
+  onMetricsChange: (metrics: PartDetailMetric[]) => void;
 }) {
+  const numericMetrics = metrics.filter(isPartMetric);
+  const showNameHistory = metrics.includes('name');
   const data = account.rows.map((row) => ({
     date: row.end,
     ...row.metrics,
   }));
-  const series = metrics.map((metric) => {
+  const series = numericMetrics.map((metric) => {
     const baseline = recentMetricMedian(account.rows, metric, to);
     return {
       metric,
@@ -1048,22 +1155,26 @@ function PartBranchMetrics({
     } satisfies MultiMetricSeries;
   });
 
-  function toggleMetric(metric: Metric) {
+  function toggleMetric(metric: PartDetailMetric) {
     onMetricsChange(
       metrics.includes(metric)
         ? metrics.filter((value) => value !== metric)
-        : PART_METRICS.filter((value) => [...metrics, metric].includes(value)),
+        : PART_DETAIL_METRICS.filter((value) =>
+            [...metrics, metric].includes(value),
+          ),
     );
   }
 
-  function toggleGroup(groupMetrics: Metric[]) {
+  function toggleGroup(groupMetrics: PartDetailMetric[]) {
     const allSelected = groupMetrics.every((metric) =>
       metrics.includes(metric),
     );
     const next = allSelected
       ? metrics.filter((metric) => !groupMetrics.includes(metric))
       : [...new Set([...metrics, ...groupMetrics])];
-    onMetricsChange(PART_METRICS.filter((metric) => next.includes(metric)));
+    onMetricsChange(
+      PART_DETAIL_METRICS.filter((metric) => next.includes(metric)),
+    );
   }
 
   return (
@@ -1114,7 +1225,7 @@ function PartBranchMetrics({
                       checked={metrics.includes(metric)}
                       onChange={() => toggleMetric(metric)}
                     />
-                    <span>{METRICS[metric].label}</span>
+                    <span>{detailMetricLabel(metric)}</span>
                   </label>
                 ))}
               </div>
@@ -1131,22 +1242,32 @@ function PartBranchMetrics({
               {account.branch}
             </span>
             <h2>
-              {mode === 'median'
-                ? 'Динамика относительно нормы'
-                : 'Динамика на собственных шкалах'}
+              {!numericMetrics.length && showNameHistory
+                ? 'История названия объявления'
+                : mode === 'median'
+                  ? 'Динамика относительно нормы'
+                  : 'Динамика на собственных шкалах'}
             </h2>
           </div>
           <p>
-            {mode === 'median'
-              ? '100% — медиана до 12 доступных недель'
-              : 'Шкала слева относится к выделенной линии'}
+            {!numericMetrics.length && showNameHistory
+              ? 'Показаны периоды, в которых использовалось каждое название'
+              : mode === 'median'
+                ? '100% — медиана до 12 доступных недель'
+                : 'Шкала слева относится к выделенной линии'}
           </p>
         </div>
-        {metrics.length ? (
-          <MultiMetricChart data={data} series={series} mode={mode} />
-        ) : (
-          <div className="empty-chart">Выберите хотя бы один показатель.</div>
+        {showNameHistory && (
+          <ListingNameHistory
+            rows={account.rows}
+            fill={!numericMetrics.length}
+          />
         )}
+        {numericMetrics.length ? (
+          <MultiMetricChart data={data} series={series} mode={mode} />
+        ) : !showNameHistory ? (
+          <div className="empty-chart">Выберите хотя бы один показатель.</div>
+        ) : null}
       </section>
     </div>
   );
