@@ -312,19 +312,23 @@ export default function Dashboard() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
-  function partHref(ad: { branch: string; id: string }, metric?: Metric) {
+  function partHref(
+    ad: { branch: string; id: string },
+    metric?: Metric,
+    preservePartFilters = false,
+  ) {
     return dashboardUrl({
       tab: 'parts',
       partBranch: ad.branch,
       partId: ad.id,
-      partsScope: 'network',
+      ...(preservePartFilters ? {} : { partsScope: 'network' }),
       ...(metric ? { partsMetric: metric, partsMetrics: metric } : {}),
     });
   }
 
   function openPart(
     ad: { branch: string; id: string },
-    sourceTab: 'insights' | 'ads',
+    sourceTab: 'insights' | 'parts' | 'ads',
     metric?: Metric,
   ) {
     const currentState = currentHistoryState();
@@ -343,13 +347,39 @@ export default function Dashboard() {
     window.history.pushState(
       {
         ...currentState,
-        pikDashboard: { tab: 'parts', partTarget: ad },
+        pikDashboard: {
+          tab: 'parts',
+          partTarget: ad,
+          partsListParent: sourceTab === 'parts',
+        },
       },
       '',
-      partHref(ad, metric),
+      partHref(ad, metric, sourceTab === 'parts'),
     );
     setPartTarget(ad);
     setTab('parts');
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  function closePart() {
+    const currentState = currentHistoryState();
+    const navigation =
+      currentState.pikDashboard && typeof currentState.pikDashboard === 'object'
+        ? currentState.pikDashboard
+        : {};
+    if (navigation.partsListParent === true) {
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(
+      {
+        ...currentState,
+        pikDashboard: { ...navigation, tab: 'parts', partTarget: null },
+      },
+      '',
+      dashboardUrl({ tab: 'parts', partBranch: null, partId: null }),
+    );
+    setPartTarget(null);
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
@@ -875,6 +905,9 @@ export default function Dashboard() {
                   initialScope="network"
                   availableBranches={visibleBranches}
                   initialAd={partTarget}
+                  onOpenPart={(ad) => openPart(ad, 'parts')}
+                  getPartHref={(ad) => partHref(ad, undefined, true)}
+                  onClosePart={closePart}
                 />
               )}
               {tab === 'ads' && (

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   ArrowRight,
@@ -163,7 +164,7 @@ type Listing = {
   key: string;
   rows: AdRow[];
   latest: AdRow;
-  current: boolean;
+  primary: boolean;
 };
 type Part = {
   key: string;
@@ -179,12 +180,6 @@ type Account = {
 };
 
 function buildParts(snapshot: Snapshot): Part[] {
-  const latestByBranch = new Map<string, string>();
-  snapshot.ads.forEach((row) => {
-    if (row.end > (latestByBranch.get(row.branch) ?? '')) {
-      latestByBranch.set(row.branch, row.end);
-    }
-  });
   const listingRows = new Map<string, AdRow[]>();
   snapshot.ads.forEach((row) => {
     const key = adKey(row);
@@ -201,7 +196,7 @@ function buildParts(snapshot: Snapshot): Part[] {
       key,
       rows,
       latest,
-      current: latest.end === latestByBranch.get(latest.branch),
+      primary: false,
     };
     if (current) current.listings.push(listing);
     else {
@@ -215,12 +210,28 @@ function buildParts(snapshot: Snapshot): Part[] {
     }
   });
   return [...parts.values()].map((part) => {
-    const listings = [...part.listings].sort(
+    const sortedListings = [...part.listings].sort(
       (a, b) =>
-        Number(b.current) - Number(a.current) ||
         b.latest.end.localeCompare(a.latest.end) ||
         b.latest.id.localeCompare(a.latest.id),
     );
+    const primaryByBranch = new Map<string, string>();
+    sortedListings.forEach((listing) => {
+      if (!primaryByBranch.has(listing.latest.branch)) {
+        primaryByBranch.set(listing.latest.branch, listing.key);
+      }
+    });
+    const listings = sortedListings
+      .map((listing) => ({
+        ...listing,
+        primary: primaryByBranch.get(listing.latest.branch) === listing.key,
+      }))
+      .sort(
+        (a, b) =>
+          Number(b.primary) - Number(a.primary) ||
+          b.latest.end.localeCompare(a.latest.end) ||
+          b.latest.id.localeCompare(a.latest.id),
+      );
     const representative = listings[0]?.latest;
     return {
       ...part,
@@ -261,7 +272,7 @@ function accountsFor(part: Part, from: string, to: string): Account[] {
   return [...grouped].map(([branch, unsortedListings]) => {
     const listings = [...unsortedListings].sort(
       (a, b) =>
-        Number(b.current) - Number(a.current) ||
+        Number(b.primary) - Number(a.primary) ||
         b.latest.end.localeCompare(a.latest.end) ||
         b.latest.id.localeCompare(a.latest.id),
     );
@@ -317,6 +328,9 @@ export default function PartExplorer({
   initialScope,
   availableBranches,
   initialAd,
+  onOpenPart,
+  getPartHref,
+  onClosePart,
 }: {
   snapshot: Snapshot;
   from: string;
@@ -324,6 +338,9 @@ export default function PartExplorer({
   initialScope: string;
   availableBranches: string[];
   initialAd?: Pick<AdRow, 'branch' | 'id'> | null;
+  onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
+  onClosePart: () => void;
 }) {
   const allParts = useMemo(() => buildParts(snapshot), [snapshot]);
   const scopes = useMemo(
@@ -349,17 +366,6 @@ export default function PartExplorer({
     initial.detailMode,
   );
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState<string | null>(() =>
-    initialAd
-      ? (allParts.find((part) =>
-          part.listings.some(
-            (listing) =>
-              listing.latest.branch === initialAd.branch &&
-              listing.latest.id === initialAd.id,
-          ),
-        )?.key ?? null)
-      : null,
-  );
   const effectiveScope =
     scope === 'network' || availableBranches.includes(scope)
       ? scope
@@ -423,8 +429,14 @@ export default function PartExplorer({
         .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity)),
     [allParts, branches, from, to, metric, search],
   );
-  const selectedPart = selected
-    ? allParts.find((part) => part.key === selected)
+  const selectedPart = initialAd
+    ? allParts.find((part) =>
+        part.listings.some(
+          (listing) =>
+            listing.latest.branch === initialAd.branch &&
+            listing.latest.id === initialAd.id,
+        ),
+      )
     : null;
 
   function changeComparisonMetrics(next: Metric[]) {
@@ -449,7 +461,7 @@ export default function PartExplorer({
         onDetailMetricsChange={setDetailMetrics}
         onAllNormalizedChange={setAllNormalized}
         onDetailModeChange={setDetailMode}
-        onBack={() => setSelected(null)}
+        onBack={onClosePart}
       />
     );
   }
@@ -506,8 +518,15 @@ export default function PartExplorer({
                     part.listings.map((listing) => listing.latest.branch),
                   ),
                 ];
+                const listing =
+                  part.listings.find((item) => item.primary) ??
+                  part.listings[0];
+                const target = {
+                  branch: listing.latest.branch,
+                  id: listing.latest.id,
+                };
                 return (
-                  <tr key={part.key} onClick={() => setSelected(part.key)}>
+                  <tr key={part.key}>
                     <td>
                       <strong>{part.name}</strong>
                       <small>
@@ -532,6 +551,24 @@ export default function PartExplorer({
                     </td>
                     <td>
                       <ArrowRight />
+                      <a
+                        className="part-row-link"
+                        href={getPartHref(target)}
+                        aria-label={`Открыть запчасть: ${part.name}`}
+                        onClick={(event) => {
+                          if (
+                            event.button !== 0 ||
+                            event.ctrlKey ||
+                            event.metaKey ||
+                            event.shiftKey ||
+                            event.altKey
+                          ) {
+                            return;
+                          }
+                          event.preventDefault();
+                          onOpenPart(target);
+                        }}
+                      />
                     </td>
                   </tr>
                 );
@@ -578,6 +615,8 @@ function PartDetail({
   onDetailModeChange: (mode: MultiMetricMode) => void;
   onBack: () => void;
 }) {
+  const headingRef = useRef<HTMLElement>(null);
+  const [showStickyHeader, setShowStickyHeader] = useState(false);
   const accounts = useMemo(
     () =>
       accountsFor(part, from, to).filter((account) =>
@@ -592,10 +631,33 @@ function PartDetail({
     effectiveScope === 'network'
       ? null
       : (accounts.find((account) => account.branch === effectiveScope) ?? null);
-  const currentListings = part.listings.filter(
+  const primaryListings = part.listings.filter(
     (listing) =>
-      listing.current && availableBranches.includes(listing.latest.branch),
+      listing.primary && availableBranches.includes(listing.latest.branch),
   ).length;
+
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const heading = headingRef.current;
+        const topbar = document.querySelector<HTMLElement>('.topbar');
+        if (!heading) return;
+        const topbarBottom = topbar?.getBoundingClientRect().bottom ?? 80;
+        const next = heading.getBoundingClientRect().bottom <= topbarBottom;
+        setShowStickyHeader((current) => (current === next ? current : next));
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
 
   function addComparisonMetric() {
     const next = metricChoices.find(
@@ -608,11 +670,51 @@ function PartDetail({
 
   return (
     <div className="part-detail">
+      {showStickyHeader &&
+        createPortal(
+          <header className="part-sticky-header">
+            <div className="part-sticky-inner">
+              <div className="part-sticky-title">
+                <span>
+                  {part.article ? `АРТИКУЛ ${part.article}` : 'ОБЪЯВЛЕНИЕ'}
+                </span>
+                <strong title={part.name}>{part.name}</strong>
+              </div>
+              <nav
+                className="part-sticky-links"
+                aria-label="Актуальные объявления подразделений"
+              >
+                {accounts.map((account) => {
+                  const listing =
+                    account.listings.find((item) => item.primary) ??
+                    account.listings[0];
+                  return (
+                    <a
+                      key={account.branch}
+                      href={avitoUrl(listing.latest.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Открыть объявление ${account.branch} № ${listing.latest.id}`}
+                    >
+                      <i
+                        style={{ background: BRANCH_COLORS[account.branch] }}
+                      />
+                      <span>{account.branch}</span>
+                      <small>№ {listing.latest.id}</small>
+                      <ExternalLink />
+                    </a>
+                  );
+                })}
+              </nav>
+            </div>
+          </header>,
+          document.body,
+        )}
       <button className="back-button" onClick={onBack}>
         <ArrowLeft />
         Все запчасти
       </button>
-      <section className="part-heading">
+      <section ref={headingRef} className="part-heading">
         <div>
           <span className="eyebrow">
             {part.article ? `АРТИКУЛ ${part.article}` : 'ОБЪЯВЛЕНИЕ'}
@@ -622,7 +724,7 @@ function PartDetail({
         </div>
         <span>
           {accounts.length} подразделений · {part.listings.length} объявлений ·{' '}
-          {currentListings} актуальных
+          {primaryListings} актуальных
         </span>
       </section>
 
@@ -636,19 +738,19 @@ function PartDetail({
             {account.listings.map((listing) => (
               <a
                 key={listing.key}
-                className={listing.current ? undefined : 'stale'}
+                className={listing.primary ? undefined : 'duplicate'}
                 href={avitoUrl(listing.latest.id)}
                 target="_blank"
                 rel="noreferrer"
                 title={
-                  listing.current
+                  listing.primary
                     ? 'Открыть актуальное объявление'
-                    : 'Объявления нет в последней выгрузке'
+                    : 'Открыть предыдущее объявление'
                 }
               >
                 <span>
                   Объявление № {listing.latest.id}
-                  {!listing.current && <small>Нет в последней выгрузке</small>}
+                  {!listing.primary && <small>Предыдущее объявление</small>}
                 </span>
                 <ExternalLink />
               </a>
