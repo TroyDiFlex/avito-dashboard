@@ -356,11 +356,13 @@ export function buildDemandGapInsights(
 function InsightCard({
   insight,
   onOpenPart,
+  getPartHref,
   demandByArticle,
   categoryByArticle,
 }: {
   insight: Insight;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
   demandByArticle: Record<string, number | null>;
   categoryByArticle: Record<string, string | null>;
 }) {
@@ -416,18 +418,29 @@ function InsightCard({
                 </a>
               )}
               {insight.listingId && (
-                <button
-                  type="button"
-                  onClick={() =>
+                <a
+                  href={getPartHref({
+                    branch: insight.branch,
+                    id: insight.listingId,
+                  })}
+                  onClick={(event) => {
+                    if (
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    )
+                      return;
+                    event.preventDefault();
                     onOpenPart({
                       branch: insight.branch,
                       id: insight.listingId!,
-                    })
-                  }
+                    });
+                  }}
                 >
                   <ChartNoAxesCombined />
                   Сравнить подразделения
-                </button>
+                </a>
               )}
             </div>
           </div>
@@ -484,6 +497,7 @@ export default function Insights({
   availableBranches,
   initialBranch,
   onOpenPart,
+  getPartHref,
   demandByArticle,
   categoryByArticle,
 }: {
@@ -493,6 +507,7 @@ export default function Insights({
   availableBranches: string[];
   initialBranch: string;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
   demandByArticle: Record<string, number | null>;
   categoryByArticle: Record<string, string | null>;
 }) {
@@ -772,6 +787,7 @@ export default function Insights({
                   key={insight.id}
                   insight={insight}
                   onOpenPart={onOpenPart}
+                  getPartHref={getPartHref}
                   demandByArticle={demandByArticle}
                   categoryByArticle={categoryByArticle}
                 />

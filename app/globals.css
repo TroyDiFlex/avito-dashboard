@@ -632,6 +632,10 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .listing-links article, .account-cards article { transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease, transform var(--motion-base) var(--motion-ease), box-shadow var(--motion-base) ease; }
 .listing-links header { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; color: #d5d5d9; font-size: 13px; }
 .listing-links a { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 0; color: #8f8f98; border-top: 1px solid #202026; font-size: 11px; }
+.listing-links a > span { min-width: 0; display: grid; gap: 2px; }
+.listing-links a small { color: #66666f; font-size: 9px; }
+.listing-links a.stale { opacity: .42; filter: saturate(.35); }
+.listing-links a.stale:hover { opacity: .72; }
 .listing-links a:hover { color: #ff6670; }
 .listing-links a svg { width: 13px; flex: none; transition: transform var(--motion-base) var(--motion-spring); }
 .listing-links a:hover svg { transform: translate(2px, -2px); }

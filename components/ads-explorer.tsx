@@ -174,13 +174,21 @@ export default function AdsExplorer({
   initialBranch,
   availableBranches,
   onOpenPart,
+  getPartHref,
 }: {
   snapshot: Snapshot;
   from: string;
   to: string;
   initialBranch: string;
   availableBranches: string[];
-  onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
+  onOpenPart: (
+    ad: Pick<AdRow, 'branch' | 'id'>,
+    metric?: Metric,
+  ) => void;
+  getPartHref: (
+    ad: Pick<AdRow, 'branch' | 'id'>,
+    metric?: Metric,
+  ) => string;
 }) {
   const [initial] = useState(() =>
     initialAdsFilters(initialBranch, availableBranches),
@@ -461,16 +469,34 @@ export default function AdsExplorer({
                             Открыть на Avito
                           </a>
                         )}
-                        <button
-                          onClick={() =>
-                            onOpenPart({
+                        <a
+                          href={getPartHref(
+                            {
                               branch: effectiveBranch,
                               id: listing.id,
-                            })
-                          }
+                            },
+                            rankMetric,
+                          )}
+                          onClick={(event) => {
+                            if (
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.shiftKey ||
+                              event.altKey
+                            )
+                              return;
+                            event.preventDefault();
+                            onOpenPart(
+                              {
+                                branch: effectiveBranch,
+                                id: listing.id,
+                              },
+                              rankMetric,
+                            );
+                          }}
                         >
                           <ChartNoAxesCombined />В других подразделениях
-                        </button>
+                        </a>
                       </span>
                     </td>
                     {TABLE_METRICS.map((metric) => (

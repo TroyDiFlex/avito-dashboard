@@ -1,4 +1,5 @@
 export type Metric =
+  | 'price'
   | 'impressions'
   | 'views'
   | 'viewRate'
@@ -8,6 +9,7 @@ export type Metric =
   | 'spend'
   | 'viewCost'
   | 'contactCost'
+  | 'contactPriceShare'
   | 'marginParts'
   | 'marginService'
   | 'margin'
@@ -89,6 +91,13 @@ export const METRICS: Record<
     group: string;
   }
 > = {
+  price: {
+    label: 'Цена объявления',
+    unit: 'money',
+    kind: 'last',
+    good: 'neutral',
+    group: 'Объявление',
+  },
   impressions: {
     label: 'Показы',
     unit: 'count',
@@ -148,6 +157,13 @@ export const METRICS: Record<
   contactCost: {
     label: 'Стоимость контакта',
     unit: 'money',
+    kind: 'ratio',
+    good: 'down',
+    group: 'Реклама',
+  },
+  contactPriceShare: {
+    label: 'Стоимость контакта от цены',
+    unit: 'percent',
     kind: 'ratio',
     good: 'down',
     group: 'Реклама',

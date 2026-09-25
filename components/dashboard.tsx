@@ -48,6 +48,7 @@ import {
   restorePeriod,
   validDate,
   validRange,
+  type Metric,
   type PeriodPreset,
   type Snapshot,
 } from '@/lib/model';
@@ -311,9 +312,20 @@ export default function Dashboard() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
+  function partHref(ad: { branch: string; id: string }, metric?: Metric) {
+    return dashboardUrl({
+      tab: 'parts',
+      partBranch: ad.branch,
+      partId: ad.id,
+      partsScope: 'network',
+      ...(metric ? { partsMetric: metric, partsMetrics: metric } : {}),
+    });
+  }
+
   function openPart(
     ad: { branch: string; id: string },
     sourceTab: 'insights' | 'ads',
+    metric?: Metric,
   ) {
     const currentState = currentHistoryState();
     window.history.replaceState(
@@ -334,11 +346,7 @@ export default function Dashboard() {
         pikDashboard: { tab: 'parts', partTarget: ad },
       },
       '',
-      dashboardUrl({
-        tab: 'parts',
-        partBranch: ad.branch,
-        partId: ad.id,
-      }),
+      partHref(ad, metric),
     );
     setPartTarget(ad);
     setTab('parts');
@@ -851,6 +859,7 @@ export default function Dashboard() {
                   demandByArticle={demandAnalysis.values}
                   categoryByArticle={demandAnalysis.categories}
                   onOpenPart={(ad) => openPart(ad, 'insights')}
+                  getPartHref={(ad) => partHref(ad)}
                 />
               )}
               {tab === 'parts' && (
@@ -875,7 +884,8 @@ export default function Dashboard() {
                   to={to}
                   initialBranch={branch}
                   availableBranches={visibleBranches}
-                  onOpenPart={(ad) => openPart(ad, 'ads')}
+                  onOpenPart={(ad, metric) => openPart(ad, 'ads', metric)}
+                  getPartHref={(ad, metric) => partHref(ad, metric)}
                 />
               )}
             </div>
