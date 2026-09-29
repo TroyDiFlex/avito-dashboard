@@ -121,6 +121,7 @@ export default function MultiMetricChart({
         )
       : [];
   const medianExtent = paddedDomain([...medianValues, 100]);
+  const scaleSeries = usableSeries.find((item) => item.metric === scaleMetric);
   const activeDomain = scaleMetric ? domains[scaleMetric] : null;
   const skipped = series.filter(
     (item) => mode === 'median' && (item.median == null || item.median <= 0),
@@ -193,12 +194,16 @@ export default function MultiMetricChart({
                   : [0, 100]
               }
               tickFormatter={(value) => {
-                if (mode === 'median') return `${Math.round(Number(value))}%`;
-                if (!scaleMetric || !activeDomain) return '';
+                if (!scaleMetric || !scaleSeries) return '';
                 const raw =
-                  activeDomain.low +
-                  (Number(value) / 100) *
-                    (activeDomain.high - activeDomain.low);
+                  mode === 'median'
+                    ? (Number(value) / 100) * scaleSeries.median!
+                    : activeDomain
+                      ? activeDomain.low +
+                        (Number(value) / 100) *
+                          (activeDomain.high - activeDomain.low)
+                      : null;
+                if (raw == null) return '';
                 return format(raw, scaleMetric, true);
               }}
               tick={{ fill: '#99a5af', fontSize: 12 }}
@@ -271,6 +276,8 @@ export default function MultiMetricChart({
                   activeDot={{ r: 5 }}
                   connectNulls={false}
                   isAnimationActive={false}
+                  onMouseEnter={() => setHoveredMetric(item.metric)}
+                  onMouseLeave={() => setHoveredMetric(null)}
                 />
               );
             })}
