@@ -1,17 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
-  ChartNoAxesCombined,
   ChevronDown,
-  CircleHelp,
   ExternalLink,
   Eye,
   Layers3,
-  MessageCircle,
+  Search,
   ShieldCheck,
-  Sparkles,
+  SlidersHorizontal,
   TrendingDown,
 } from 'lucide-react';
 import { Picker } from '@/components/analytics-ui';
@@ -20,502 +18,310 @@ import {
   replaceUrlParameters,
   saveBrowserPreference,
 } from '@/lib/browser-preferences';
+import { demandLevel } from '@/lib/demand';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
-  INSIGHT_KIND_LABELS,
-  buildInsightReport,
-  type Insight,
-  type InsightKind,
-  type InsightTone,
-} from '@/lib/insights';
-import {
-  demandForArticle,
-  demandLevel,
-  normalizeDemandArticle,
-} from '@/lib/demand';
-import { extractArticle } from '@/lib/explore';
-import type { AdRow, Snapshot } from '@/lib/model';
+  buildGrowthCases,
+  DEFAULT_GROWTH_RULES,
+  GROWTH_SIGNAL_LABELS,
+  normalizeGrowthRules,
+  type GrowthCase,
+  type GrowthCaseState,
+  type GrowthRules,
+  type GrowthSignalKind,
+} from '@/lib/growth';
+import { format, shortDate, type AdRow, type Snapshot } from '@/lib/model';
 
-type ViewFilter = 'all' | 'high' | 'medium' | 'opportunity';
+type ViewFilter = GrowthCaseState | 'all';
+type Decision = 'unreviewed' | 'high' | 'watch' | 'ok' | 'recreated';
+type DecisionFilter = Decision | 'all';
+
 const PAGE_SIZE = 60;
+const FILTERS_KEY = 'pik-growth-filters';
+const RULES_KEY = 'pik-growth-rules';
+const DECISIONS_KEY = 'pik-growth-decisions';
 
 const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
-  { value: 'all', label: 'Все' },
-  { value: 'high', label: 'Высокий приоритет' },
-  { value: 'medium', label: 'Стоит проверить' },
-  { value: 'opportunity', label: 'Сильные примеры' },
+  { value: 'signal', label: 'Требуют внимания' },
+  { value: 'waiting', label: 'Ждём данные' },
+  { value: 'clear', label: 'Без сигналов' },
+  { value: 'all', label: 'Все товары' },
 ];
 
-const INSIGHTS_FILTERS_KEY = 'pik-insights-filters';
+const DECISION_CHOICES: { value: Decision; label: string }[] = [
+  { value: 'unreviewed', label: 'Не разобрано' },
+  { value: 'high', label: 'Высокий приоритет' },
+  { value: 'watch', label: 'Наблюдать' },
+  { value: 'ok', label: 'Всё в порядке' },
+  { value: 'recreated', label: 'Пересоздано' },
+];
+
+function storedRules(): GrowthRules {
+  const saved = readBrowserPreference(RULES_KEY);
+  return normalizeGrowthRules({
+    ...DEFAULT_GROWTH_RULES,
+    ...(saved && typeof saved === 'object' ? saved : {}),
+  } as GrowthRules);
+}
+
+function storedDecisions(): Record<string, Decision> {
+  const saved = readBrowserPreference(DECISIONS_KEY);
+  if (!saved || typeof saved !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(saved).filter((entry): entry is [string, Decision] =>
+      DECISION_CHOICES.some((choice) => choice.value === entry[1]),
+    ),
+  );
+}
 
 function initialFilters(initialBranch: string, availableBranches: string[]) {
-  const fallbackScope = availableBranches.includes(initialBranch)
-    ? initialBranch
-    : 'network';
-  const fallback = {
-    scope: fallbackScope,
-    view: 'all' as ViewFilter,
-    kind: 'all' as 'all' | InsightKind,
+  const saved = readBrowserPreference(FILTERS_KEY);
+  const params =
+    typeof window === 'undefined'
+      ? new URLSearchParams()
+      : new URLSearchParams(window.location.search);
+  const value = (name: string, fallback = '') =>
+    params.get(name) ??
+    (typeof saved[name] === 'string' ? String(saved[name]) : fallback);
+  const scopeCandidate = value(
+    'scope',
+    availableBranches.includes(initialBranch) ? initialBranch : 'network',
+  );
+  const viewCandidate = value('growthView', 'signal');
+  const decisionCandidate = value('growthDecision', 'all');
+  return {
+    scope:
+      scopeCandidate === 'network' || availableBranches.includes(scopeCandidate)
+        ? scopeCandidate
+        : 'network',
+    view: VIEW_FILTERS.some((item) => item.value === viewCandidate)
+      ? (viewCandidate as ViewFilter)
+      : ('signal' as ViewFilter),
+    category: value('growthCategory', 'all'),
+    demandMin: value('growthDemandMin'),
+    demandMax: value('growthDemandMax'),
+    signal: value('growthSignal', 'all') as 'all' | GrowthSignalKind,
+    decision: (decisionCandidate === 'all' ||
+    DECISION_CHOICES.some((item) => item.value === decisionCandidate)
+      ? decisionCandidate
+      : 'all') as DecisionFilter,
+    search: value('growthSearch'),
     visibleCount: PAGE_SIZE,
   };
-  if (typeof window === 'undefined') return fallback;
-  const stored = readBrowserPreference(INSIGHTS_FILTERS_KEY);
-  const params = new URLSearchParams(window.location.search);
-  const urlScope = params.get('scope');
-  const urlView = params.get('priority');
-  const urlKind = params.get('reason');
-  const savedCount = params.get('shown');
-  const parsedCount =
-    savedCount && /^\d+$/.test(savedCount) ? Number(savedCount) : PAGE_SIZE;
-  const validScope = (value: unknown): value is string =>
-    value === 'network' ||
-    (typeof value === 'string' && availableBranches.includes(value));
-  const validView = (value: unknown): value is ViewFilter =>
-    VIEW_FILTERS.some((item) => item.value === value);
-  const validKind = (value: unknown): value is 'all' | InsightKind =>
-    value === 'all' ||
-    (typeof value === 'string' && Object.hasOwn(INSIGHT_KIND_LABELS, value));
-  return {
-    scope: validScope(urlScope)
-      ? urlScope
-      : validScope(stored.scope)
-        ? stored.scope
-        : fallbackScope,
-    view: validView(urlView)
-      ? urlView
-      : validView(stored.view)
-        ? stored.view
-        : 'all',
-    kind: validKind(urlKind)
-      ? urlKind
-      : validKind(stored.kind)
-        ? stored.kind
-        : 'all',
-    visibleCount: Math.max(PAGE_SIZE, Math.min(parsedCount, 6000)),
-  };
 }
 
-const NEGATIVE_KINDS = new Set<InsightKind>([
-  'reach-drop',
-  'view-rate-drop',
-  'contact-rate-drop',
-  'persistent-low-reach',
-  'persistent-no-result',
-  'portfolio-view-gap',
-  'portfolio-contact-gap',
-  'peer-gap',
-]);
-
-const PRIORITY_KIND_BY_SOURCE: Partial<Record<InsightKind, InsightKind>> = {
-  'reach-drop': 'priority-reach-drop',
-  'view-rate-drop': 'priority-view-rate-drop',
-  'contact-rate-drop': 'priority-contact-rate-drop',
-  'persistent-low-reach': 'priority-persistent-low-reach',
-  'persistent-no-result': 'priority-persistent-no-result',
-  'portfolio-view-gap': 'priority-portfolio-view-gap',
-  'portfolio-contact-gap': 'priority-portfolio-contact-gap',
-  'peer-gap': 'priority-peer-gap',
-};
-
-const PRIORITY_RESULT_BY_SOURCE: Partial<Record<InsightKind, string>> = {
-  'reach-drop': 'охват недавно снизился',
-  'view-rate-drop': 'доля просмотров недавно снизилась',
-  'contact-rate-drop': 'доля контактов недавно снизилась',
-  'persistent-low-reach': 'охват стабильно низкий',
-  'persistent-no-result': 'долго нет контактов',
-  'portfolio-view-gap': 'просмотры хуже среднего по подразделению',
-  'portfolio-contact-gap': 'контакты хуже среднего по подразделению',
-  'peer-gap': 'результат хуже других подразделений',
-};
-
-const PRIORITY_REACH_KINDS = new Set<InsightKind>([
-  'priority-reach-drop',
-  'priority-persistent-low-reach',
-]);
-const PRIORITY_VIEW_KINDS = new Set<InsightKind>([
-  'priority-view-rate-drop',
-  'priority-portfolio-view-gap',
-]);
-const PRIORITY_CONTACT_KINDS = new Set<InsightKind>([
-  'priority-contact-rate-drop',
-  'priority-persistent-no-result',
-  'priority-portfolio-contact-gap',
-  'priority-peer-gap',
-]);
-
-function InfoTip({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="insight-info-button"
-            aria-label={label}
-          >
-            <CircleHelp />
-          </button>
-        }
-      />
-      <TooltipContent className="insight-tooltip" side="bottom" align="start">
-        {children}
-      </TooltipContent>
-    </Tooltip>
-  );
+function avitoUrl(id: string) {
+  return /^\d+$/.test(id) ? `https://www.avito.ru/${id}` : null;
 }
 
-function insightIcon(insight: Insight) {
+function parseBound(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value.replace(',', '.'));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function caseIcon(item: GrowthCase) {
+  if (item.signals.some((signal) => signal.kind === 'duplicate'))
+    return <Layers3 />;
   if (
-    insight.kind === 'reach-drop' ||
-    insight.kind === 'persistent-low-reach' ||
-    PRIORITY_REACH_KINDS.has(insight.kind)
+    item.signals.some(
+      (signal) =>
+        signal.kind === 'no-impressions' || signal.kind === 'low-reach',
+    )
   )
     return <TrendingDown />;
-  if (
-    insight.kind === 'view-rate-drop' ||
-    insight.kind === 'portfolio-view-gap' ||
-    PRIORITY_VIEW_KINDS.has(insight.kind)
-  )
-    return <Eye />;
-  if (
-    insight.kind === 'contact-rate-drop' ||
-    insight.kind === 'portfolio-contact-gap' ||
-    insight.kind === 'persistent-no-result' ||
-    insight.kind === 'peer-gap' ||
-    PRIORITY_CONTACT_KINDS.has(insight.kind)
-  )
-    return <MessageCircle />;
-  if (insight.kind === 'peer-winner' || insight.kind === 'portfolio-winner')
-    return <Sparkles />;
-  return <Layers3 />;
+  if (item.state === 'clear') return <ShieldCheck />;
+  return <Eye />;
 }
 
-function toneLabel(tone: InsightTone) {
-  if (tone === 'high') return 'Высокий приоритет';
-  if (tone === 'medium') return 'Стоит проверить';
-  if (tone === 'opportunity') return 'Успешный пример';
-  return 'Возможный дубль';
-}
-
-function reportCountLabel(count: number) {
-  const mod100 = count % 100;
-  const mod10 = count % 10;
-  const word =
-    mod100 >= 11 && mod100 <= 14
-      ? 'отчётов'
-      : mod10 === 1
-        ? 'отчёт'
-        : mod10 >= 2 && mod10 <= 4
-          ? 'отчёта'
-          : 'отчётов';
-  return `${count.toLocaleString('ru-RU')} ${word}`;
-}
-
-function avitoUrl(id?: string) {
-  return id && /^\d+$/.test(id) ? `https://www.avito.ru/${id}` : null;
-}
-
-function demandForInsight(
-  values: Record<string, number | null>,
-  categories: Record<string, string | null>,
-  insight: Insight,
-) {
-  const candidates = [
-    insight.article,
-    ...extractArticle(insight.name).candidates,
-  ].filter((value): value is string => Boolean(value));
-  for (const article of candidates) {
-    const demand = demandForArticle(values, article);
-    if (demand.found)
-      return {
-        ...demand,
-        article: normalizeDemandArticle(article),
-        category: categories[normalizeDemandArticle(article)] ?? null,
-      };
-  }
-  return {
-    found: false,
-    value: null,
-    article: insight.article ?? null,
-    category: null,
-  };
-}
-
-function viewMatchesInsight(view: ViewFilter, insight: Insight): boolean {
-  return (
-    view === 'all' ||
-    (view === 'high' && insight.tone === 'high') ||
-    (view === 'medium' &&
-      (insight.tone === 'medium' || insight.tone === 'check')) ||
-    (view === 'opportunity' && insight.tone === 'opportunity')
-  );
-}
-
-export function buildDemandGapInsights(
-  insights: Insight[],
-  demandByArticle: Record<string, number | null>,
-  categoryByArticle: Record<string, string | null>,
-): Insight[] {
-  const demandValues = Object.values(demandByArticle)
-    .filter((value): value is number => value != null)
-    .sort((left, right) => left - right);
-  const highDemandThreshold = demandValues.length
-    ? demandValues[Math.floor((demandValues.length - 1) * 0.75)]
-    : null;
-  const strongestByListing = new Map<
-    string,
-    {
-      insight: Insight;
-      demand: number | null;
-      article: string | null;
-      category: string | null;
-    }
-  >();
-
-  insights.forEach((insight) => {
-    if (!NEGATIVE_KINDS.has(insight.kind)) return;
-    const priorityKind = PRIORITY_KIND_BY_SOURCE[insight.kind];
-    if (!priorityKind) return;
-    const product = demandForInsight(
-      demandByArticle,
-      categoryByArticle,
-      insight,
-    );
-    const categoryPriority = product.category
-      ? ({ A: 3, B: 2, C: 1 }[product.category] ?? 0)
-      : 0;
-    const highDemand =
-      product.value != null &&
-      highDemandThreshold != null &&
-      product.value >= highDemandThreshold;
-    if (!highDemand && categoryPriority === 0) return;
-    const key =
-      insight.listingKey ??
-      `${insight.branch}:${insight.listingId ?? insight.name}`;
-    const previous = strongestByListing.get(key);
-    if (!previous || insight.score > previous.insight.score) {
-      strongestByListing.set(key, {
-        insight,
-        demand: product.value,
-        article: product.article,
-        category: product.category,
-      });
-    }
-  });
-
-  return [...strongestByListing.entries()].map(
-    ([listingKey, { insight, demand, article, category }]) => {
-      const priorityKind = PRIORITY_KIND_BY_SOURCE[insight.kind]!;
-      const weakResult = PRIORITY_RESULT_BY_SOURCE[insight.kind]!;
-      const demandText =
-        demand == null
-          ? null
-          : `${category ? 'спрос' : 'Спрос'} ${demand.toLocaleString('ru-RU')}`;
-      const categoryText = category ? `Категория ${category}` : null;
-      const priorityText = [categoryText, demandText]
-        .filter(Boolean)
-        .join(' · ');
-      const categoryBonus = category
-        ? ({ A: 50, B: 35, C: 20 }[category] ?? 0)
-        : 0;
-      return {
-        ...insight,
-        id: `${priorityKind}:${listingKey}`,
-        kind: priorityKind,
-        tone: 'high' as const,
-        article,
-        title: `${categoryText ? `Товар категории ${category}` : 'Приоритетный товар'}: ${weakResult}`,
-        summary: insight.summary,
-        comparison: `${priorityText}; ${insight.comparison}`,
-        sufficiency: `${insight.sufficiency} Приоритет товара взят из загруженной таблицы.`,
-        method: `Спрос и категория используются для приоритизации, а не как доказательство причины. Слабый результат подтверждён отдельно: ${insight.method}`,
-        checks: Array.from(
-          new Set([
-            'Проверить соответствие артикула и объявления',
-            ...insight.checks,
-          ]),
-        ),
-        score:
-          insight.score +
-          categoryBonus +
-          (demand != null &&
-          highDemandThreshold != null &&
-          demand >= highDemandThreshold
-            ? 35
-            : 0),
-      };
-    },
-  );
-}
-
-function InsightCard({
-  insight,
+function GrowthCard({
+  item,
+  decision,
+  rules,
+  demandPopulation,
+  onDecisionChange,
   onOpenPart,
   onOpenPartMetrics,
   getPartHref,
   getPartMetricsHref,
-  demandByArticle,
-  categoryByArticle,
 }: {
-  insight: Insight;
+  item: GrowthCase;
+  decision: Decision;
+  rules: GrowthRules;
+  demandPopulation: Array<number | null>;
+  onDecisionChange: (decision: Decision) => void;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   onOpenPartMetrics: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
   getPartMetricsHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
-  demandByArticle: Record<string, number | null>;
-  categoryByArticle: Record<string, string | null>;
 }) {
-  const url = avitoUrl(insight.listingId);
-  const demand = demandForInsight(demandByArticle, categoryByArticle, insight);
-  const demandTone = demandLevel(demand.value, Object.values(demandByArticle));
-  const displayedArticle = demand.found ? demand.article : insight.article;
+  const ad = { branch: item.branch, id: item.primaryId };
+  const url = avitoUrl(item.primaryId);
+  const demandTone = demandLevel(item.demand, demandPopulation);
   return (
-    <article className={`insight-card tone-${insight.tone}`}>
-      <header className="insight-card-header">
-        <span className="insight-card-icon">{insightIcon(insight)}</span>
-        <div className="insight-card-heading">
-          <div className="insight-card-tags">
-            <span className="insight-branch">{insight.branch}</span>
-            {displayedArticle && (
-              <span className="insight-article">
-                Артикул {displayedArticle}
+    <article className={`growth-card state-${item.state}`}>
+      <header className="growth-card-header">
+        <span className="growth-card-icon">{caseIcon(item)}</span>
+        <div className="growth-card-heading">
+          <div className="growth-card-tags">
+            <span className="growth-branch">{item.branch}</span>
+            {item.article && <span>Артикул {item.article}</span>}
+            {item.category && (
+              <span className={`growth-category category-${item.category}`}>
+                Категория {item.category}
               </span>
             )}
-            {demand.found && (
-              <span className={`insight-demand demand-${demandTone}`}>
+            {item.demandFound && (
+              <span className={`growth-demand demand-${demandTone}`}>
                 Спрос{' '}
-                {demand.value == null
-                  ? '—'
-                  : demand.value.toLocaleString('ru-RU')}
+                {item.demand == null
+                  ? 'нет значения'
+                  : item.demand.toLocaleString('ru-RU')}
               </span>
-            )}
-            {demand.category && (
-              <span className={`insight-category category-${demand.category}`}>
-                Категория {demand.category}
-              </span>
-            )}
-            {insight.listingId && (
-              <span className="insight-listing-id">№ {insight.listingId}</span>
             )}
           </div>
-          <div className="insight-title-row">
-            <h3>
-              {url ? (
-                <a href={url} target="_blank" rel="noreferrer">
-                  {insight.name}
-                  <ExternalLink />
+          <div className="growth-title-row">
+            <div>
+              <h3>
+                <a
+                  href={getPartHref(ad)}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onOpenPart(ad);
+                  }}
+                >
+                  {item.name}
                 </a>
-              ) : (
-                insight.name
-              )}
-            </h3>
-            <div className="insight-actions">
+              </h3>
+              <p>
+                Текущее: {item.currentIds.map((id) => `№ ${id}`).join(', ')}
+                {item.previousIds.length > 0 &&
+                  ` · предыдущих ${item.previousIds.length}`}
+              </p>
+            </div>
+            <div className="growth-card-actions">
               {url && (
                 <a href={url} target="_blank" rel="noreferrer">
-                  <ExternalLink />
-                  Открыть объявление
+                  Открыть объявление <ExternalLink />
                 </a>
               )}
-              {insight.listingId && (
-                <>
-                  <a
-                    href={getPartHref({
-                      branch: insight.branch,
-                      id: insight.listingId,
-                    })}
-                    onClick={(event) => {
-                      if (
-                        event.metaKey ||
-                        event.ctrlKey ||
-                        event.shiftKey ||
-                        event.altKey
-                      )
-                        return;
-                      event.preventDefault();
-                      onOpenPart({
-                        branch: insight.branch,
-                        id: insight.listingId!,
-                      });
-                    }}
-                  >
-                    <ChartNoAxesCombined />
-                    Сравнить подразделения
-                  </a>
-                  <a
-                    href={getPartMetricsHref({
-                      branch: insight.branch,
-                      id: insight.listingId,
-                    })}
-                    onClick={(event) => {
-                      if (
-                        event.metaKey ||
-                        event.ctrlKey ||
-                        event.shiftKey ||
-                        event.altKey
-                      )
-                        return;
-                      event.preventDefault();
-                      onOpenPartMetrics({
-                        branch: insight.branch,
-                        id: insight.listingId!,
-                      });
-                    }}
-                  >
-                    <Eye />
-                    Посмотреть показатели
-                  </a>
-                </>
-              )}
+              <a
+                href={getPartMetricsHref(ad)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onOpenPartMetrics(ad);
+                }}
+              >
+                Показатели <ArrowRight />
+              </a>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="insight-signal-summary">
-        <span className={`insight-priority tone-${insight.tone}`}>
-          {toneLabel(insight.tone)}
+      <div className="growth-funnel" aria-label="Фактические результаты">
+        <span>
+          <small>Показы</small>
+          <strong>{format(item.impressions, 'impressions')}</strong>
         </span>
-        <div>
-          <strong>{insight.title}</strong>
-          <p>{insight.summary}</p>
-        </div>
+        <ArrowRight />
+        <span>
+          <small>Просмотры</small>
+          <strong>{format(item.views, 'views')}</strong>
+        </span>
+        <ArrowRight />
+        <span>
+          <small>Контакты</small>
+          <strong>{format(item.contacts, 'contacts')}</strong>
+        </span>
+        <span className="growth-window">
+          <small>Окно</small>
+          <strong>
+            {item.windowReportCount} из {item.reportCount} выгрузок
+          </strong>
+        </span>
       </div>
 
-      <div
-        className={`insight-evidence ${insight.expected ? 'with-expected' : ''}`}
-      >
-        <span>
-          <small>Фактический результат</small>
-          <strong>{insight.current}</strong>
-        </span>
-        <span>
-          <small>База сравнения</small>
-          <strong>{insight.comparison}</strong>
-        </span>
-        {insight.expected && (
-          <span>
-            <small>
-              Ожидаемый результат
-              <InfoTip label="Что означает ожидаемый результат">
-                Это не прогноз продаж. Мы применяем прежнюю или сетевую
-                конверсию к текущему числу просмотров и смотрим, сколько
-                контактов обычно соответствовало бы такому объёму.
-              </InfoTip>
-            </small>
-            <strong>{insight.expected}</strong>
-          </span>
+      <div className="growth-findings">
+        {item.signals.length > 0 ? (
+          item.signals.map((signal) => (
+            <div
+              key={signal.kind}
+              className={`growth-finding signal-${signal.kind}`}
+            >
+              <strong>{signal.title}</strong>
+              <p>{signal.explanation}</p>
+            </div>
+          ))
+        ) : item.state === 'waiting' ? (
+          <div className="growth-finding waiting">
+            <strong>Пока рано оценивать</strong>
+            <p>
+              Текущий номер попал в {item.reportCount} выгрузок выбранного
+              периода; правила начинают проверку с {rules.minimumReports}.
+            </p>
+          </div>
+        ) : (
+          <div className="growth-finding clear">
+            <strong>По настроенным правилам сигналов нет</strong>
+            <p>
+              Это не автоматическая оценка «хорошо»: товар просто не совпал с
+              активными условиями.
+            </p>
+          </div>
         )}
-        <span>
-          <small>Отчётов в расчёте</small>
-          <strong>{reportCountLabel(insight.reportCount)}</strong>
-        </span>
       </div>
+
+      <footer className="growth-card-footer">
+        <span>
+          Первая выгрузка: <b>{shortDate(item.firstSeen)}</b>
+        </span>
+        <span>
+          Последняя: <b>{shortDate(item.lastSeen)}</b>
+        </span>
+        <div className="growth-decision">
+          <span>Моё решение</span>
+          <Picker
+            label="Моё решение"
+            value={decision}
+            onChange={(value) => onDecisionChange(value as Decision)}
+            items={DECISION_CHOICES}
+            contentAlign="end"
+          />
+        </div>
+      </footer>
     </article>
+  );
+}
+
+function RuleField({
+  label,
+  value,
+  min = 0,
+  max,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  suffix?: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="growth-rule-field">
+      <span>{label}</span>
+      <div>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+        />
+        {suffix && <small>{suffix}</small>}
+      </div>
+    </label>
   );
 }
 
@@ -548,320 +354,448 @@ export default function Insights({
     initialFilters(initialBranch, availableBranches),
   );
   const [scope, setScope] = useState(initial.scope);
-  const [view, setView] = useState<ViewFilter>(initial.view);
-  const [kind, setKind] = useState<'all' | InsightKind>(initial.kind);
+  const [view, setView] = useState(initial.view);
+  const [category, setCategory] = useState(initial.category);
+  const [demandMin, setDemandMin] = useState(initial.demandMin);
+  const [demandMax, setDemandMax] = useState(initial.demandMax);
+  const [signal, setSignal] = useState<'all' | GrowthSignalKind>(
+    initial.signal,
+  );
+  const [decision, setDecision] = useState<DecisionFilter>(initial.decision);
+  const [search, setSearch] = useState(initial.search);
   const [visibleCount, setVisibleCount] = useState(initial.visibleCount);
-  const changeView = (next: ViewFilter) => {
-    setView(next);
-    setKind('all');
-    setVisibleCount(PAGE_SIZE);
-    replaceUrlParameters({
-      priority: next,
-      reason: 'all',
-      shown: String(PAGE_SIZE),
-    });
-  };
-  const changeKind = (next: 'all' | InsightKind) => {
-    setKind(next);
-    setVisibleCount(PAGE_SIZE);
-    replaceUrlParameters({ reason: next, shown: String(PAGE_SIZE) });
-  };
-  const changeScope = (next: string) => {
-    setScope(next);
-    setVisibleCount(PAGE_SIZE);
-    replaceUrlParameters({ scope: next, shown: String(PAGE_SIZE) });
-  };
-  const showMore = () => {
-    const next = visibleCount + PAGE_SIZE;
-    setVisibleCount(next);
-    replaceUrlParameters({ shown: String(next) });
-  };
-  const resetFilters = () => {
-    setView('all');
-    setKind('all');
-    setVisibleCount(PAGE_SIZE);
-    replaceUrlParameters({
-      priority: 'all',
-      reason: 'all',
-      shown: String(PAGE_SIZE),
-    });
-  };
+  const [rules, setRules] = useState(storedRules);
+  const [decisions, setDecisions] = useState(storedDecisions);
+
   const effectiveScope =
     scope === 'network' || availableBranches.includes(scope)
       ? scope
       : 'network';
-
-  useEffect(() => {
-    saveBrowserPreference(INSIGHTS_FILTERS_KEY, {
-      scope: effectiveScope,
-      view,
-      kind,
-    });
-    replaceUrlParameters({
-      scope: effectiveScope,
-      priority: view,
-      reason: kind,
-      shown: String(visibleCount),
-    });
-  }, [effectiveScope, kind, view, visibleCount]);
-
-  const report = useMemo(
+  const cases = useMemo(
     () =>
-      buildInsightReport(snapshot, {
+      buildGrowthCases(snapshot, {
         from,
         to,
-        availableBranches,
-        scope: effectiveScope,
-      }),
-    [availableBranches, effectiveScope, from, snapshot, to],
-  );
-  const demandGapInsights = useMemo(
-    () =>
-      buildDemandGapInsights(
-        report.insights,
+        branches: availableBranches,
         demandByArticle,
         categoryByArticle,
-      ),
-    [categoryByArticle, demandByArticle, report.insights],
+        rules,
+      }),
+    [
+      availableBranches,
+      categoryByArticle,
+      demandByArticle,
+      from,
+      rules,
+      snapshot,
+      to,
+    ],
   );
-  const allInsights = useMemo(
-    () => [...report.insights, ...demandGapInsights],
-    [demandGapInsights, report.insights],
+
+  useEffect(() => {
+    saveBrowserPreference(RULES_KEY, { ...rules });
+  }, [rules]);
+  useEffect(() => {
+    saveBrowserPreference(DECISIONS_KEY, decisions);
+  }, [decisions]);
+  useEffect(() => {
+    const filters = {
+      scope: effectiveScope,
+      view,
+      category,
+      demandMin,
+      demandMax,
+      signal,
+      decision,
+      search,
+    };
+    saveBrowserPreference(FILTERS_KEY, filters);
+    replaceUrlParameters({
+      scope: effectiveScope,
+      growthView: view,
+      growthCategory: category,
+      growthDemandMin: demandMin,
+      growthDemandMax: demandMax,
+      growthSignal: signal,
+      growthDecision: decision,
+      growthSearch: search,
+    });
+  }, [
+    category,
+    decision,
+    demandMax,
+    demandMin,
+    effectiveScope,
+    search,
+    signal,
+    view,
+  ]);
+
+  const scoped = cases.filter(
+    (item) => effectiveScope === 'network' || item.branch === effectiveScope,
   );
+  const categories = [
+    ...new Set(cases.map((item) => item.category).filter(Boolean)),
+  ].sort((left, right) =>
+    String(left).localeCompare(String(right), 'ru'),
+  ) as string[];
+  const categoryChoices = [
+    { value: 'all', label: 'Все категории' },
+    ...categories.map((value) => ({
+      value,
+      label: `Категория ${value}`,
+    })),
+    { value: 'none', label: 'Без категории' },
+  ];
+  const minimumDemand = parseBound(demandMin);
+  const maximumDemand = parseBound(demandMax);
+  const normalizedSearch = search.trim().toLocaleLowerCase('ru');
+  const commonFiltered = scoped.filter((item) => {
+    const itemDecision = decisions[item.generationKey] ?? 'unreviewed';
+    if (
+      category !== 'all' &&
+      (category === 'none' ? item.category != null : item.category !== category)
+    )
+      return false;
+    if (
+      minimumDemand != null &&
+      (item.demand == null || item.demand < minimumDemand)
+    )
+      return false;
+    if (
+      maximumDemand != null &&
+      (item.demand == null || item.demand > maximumDemand)
+    )
+      return false;
+    if (decision !== 'all' && itemDecision !== decision) return false;
+    if (
+      signal !== 'all' &&
+      !item.signals.some((itemSignal) => itemSignal.kind === signal)
+    )
+      return false;
+    if (
+      normalizedSearch &&
+      !`${item.article ?? ''} ${item.name} ${item.branch} ${item.currentIds.join(' ')}`
+        .toLocaleLowerCase('ru')
+        .includes(normalizedSearch)
+    )
+      return false;
+    return true;
+  });
   const viewCounts = Object.fromEntries(
     VIEW_FILTERS.map((item) => [
       item.value,
-      allInsights.filter((insight) => viewMatchesInsight(item.value, insight))
-        .length,
+      item.value === 'all'
+        ? commonFiltered.length
+        : commonFiltered.filter((entry) => entry.state === item.value).length,
     ]),
   ) as Record<ViewFilter, number>;
-  const viewInsights = allInsights.filter((insight) =>
-    viewMatchesInsight(view, insight),
-  );
-  const kindCounts = viewInsights.reduce<Partial<Record<InsightKind, number>>>(
-    (counts, insight) => {
-      counts[insight.kind] = (counts[insight.kind] ?? 0) + 1;
-      return counts;
-    },
-    {},
-  );
-  const selectableKindCounts = { ...kindCounts };
-  if (view === 'medium' && selectableKindCounts.duplicate == null)
-    selectableKindCounts.duplicate = 0;
-  const kindChoices: { value: 'all' | InsightKind; label: string }[] = [
-    { value: 'all', label: `Все причины · ${viewInsights.length}` },
-    ...Object.entries(selectableKindCounts)
-      .map(([value, count]) => ({
-        value: value as InsightKind,
-        label: `${INSIGHT_KIND_LABELS[value as InsightKind]} · ${count}`,
-      }))
-      .sort((left, right) => left.label.localeCompare(right.label, 'ru')),
-  ];
-  const effectiveKind = kindChoices.some((choice) => choice.value === kind)
-    ? kind
-    : 'all';
-  const filtered = viewInsights
-    .filter(
-      (insight) => effectiveKind === 'all' || insight.kind === effectiveKind,
-    )
-    .sort((left, right) => right.score - left.score);
+  const stateRank: Record<GrowthCaseState, number> = {
+    signal: 0,
+    waiting: 1,
+    clear: 2,
+  };
+  const filtered = commonFiltered
+    .filter((item) => view === 'all' || item.state === view)
+    .sort(
+      (left, right) =>
+        stateRank[left.state] - stateRank[right.state] ||
+        Number(right.category === 'A') - Number(left.category === 'A') ||
+        (right.demand ?? -1) - (left.demand ?? -1) ||
+        right.reportCount - left.reportCount ||
+        left.name.localeCompare(right.name, 'ru'),
+    );
   const displayed = filtered.slice(0, visibleCount);
+  const summary = {
+    total: scoped.length,
+    signal: scoped.filter((item) => item.state === 'signal').length,
+    waiting: scoped.filter((item) => item.state === 'waiting').length,
+    clear: scoped.filter((item) => item.state === 'clear').length,
+    duplicates: scoped.filter((item) =>
+      item.signals.some((itemSignal) => itemSignal.kind === 'duplicate'),
+    ).length,
+  };
   const scopes = [
     { value: 'network', label: 'Все подразделения' },
     ...availableBranches.map((value) => ({ value, label: value })),
   ];
+  const signalChoices = [
+    { value: 'all', label: 'Все типы сигналов' },
+    ...Object.entries(GROWTH_SIGNAL_LABELS).map(([value, label]) => ({
+      value,
+      label,
+    })),
+  ];
+  const decisionChoices = [
+    { value: 'all', label: 'Любое решение' },
+    ...DECISION_CHOICES,
+  ];
+  const updateRule = (key: keyof GrowthRules, value: number) =>
+    setRules((current) => normalizeGrowthRules({ ...current, [key]: value }));
+  const resetFilters = () => {
+    setCategory('all');
+    setDemandMin('');
+    setDemandMax('');
+    setSignal('all');
+    setDecision('all');
+    setSearch('');
+    setVisibleCount(PAGE_SIZE);
+  };
 
   return (
-    <TooltipProvider delay={180}>
-      <div className="insights-page">
-        <section className="catalog-header insights-header">
-          <div>
-            <span className="eyebrow">ОБЪЯВЛЕНИЯ, КОТОРЫЕ СТОИТ ПРОВЕРИТЬ</span>
-            <h2>Точки роста</h2>
-            <p>
-              Вывод появляется только тогда, когда данных хватает отличить
-              устойчивое изменение от случайного колебания.
-              <InfoTip label="Что такое достаточность данных">
-                Достаточность проверяется отдельно для каждого вывода. Один
-                контакт из одного просмотра не считается доказательством успеха,
-                а ноль контактов при малом числе просмотров не доказывает плохую
-                конверсию. Длительное отсутствие результата учитывается
-                отдельно.
-              </InfoTip>
-            </p>
-          </div>
-          <div className="insights-scope-picker">
-            <span>Подразделение</span>
-            <Picker
-              label="Подразделение"
-              value={effectiveScope}
-              onChange={changeScope}
-              items={scopes}
+    <div className="insights-page growth-page">
+      <section className="catalog-header insights-header growth-header">
+        <div>
+          <span className="eyebrow">
+            ПРОЗРАЧНЫЕ СИГНАЛЫ ПО ТЕКУЩИМ ОБЪЯВЛЕНИЯМ
+          </span>
+          <h2>Точки роста</h2>
+          <p>
+            Один артикул в подразделении — одна карточка. Спрос — рыночные
+            запросы; категория — вклад товара в годовой финансовый результат. Это два
+            независимых фильтра.
+          </p>
+        </div>
+        <div className="insights-scope-picker">
+          <span>Подразделение</span>
+          <Picker
+            label="Подразделение"
+            value={effectiveScope}
+            onChange={(value) => {
+              setScope(value);
+              setVisibleCount(PAGE_SIZE);
+            }}
+            items={scopes}
+          />
+        </div>
+      </section>
+
+      <section className="growth-summary panel">
+        <span>
+          <small>Товаров</small>
+          <strong>{summary.total}</strong>
+        </span>
+        <span>
+          <small>Требуют внимания</small>
+          <strong>{summary.signal}</strong>
+        </span>
+        <span>
+          <small>Ждём данные</small>
+          <strong>{summary.waiting}</strong>
+        </span>
+        <span>
+          <small>Без сигналов</small>
+          <strong>{summary.clear}</strong>
+        </span>
+        <span>
+          <small>Дубли</small>
+          <strong>{summary.duplicates}</strong>
+        </span>
+      </section>
+
+      <details className="growth-rules panel">
+        <summary>
+          <span>
+            <SlidersHorizontal /> <b>Правила сигналов</b>
+          </span>
+          <small>Все пороги видны и меняются вручную</small>
+          <ChevronDown />
+        </summary>
+        <div className="growth-rules-body">
+          <div className="growth-rule-grid">
+            <RuleField
+              label="Минимум выгрузок текущего номера"
+              value={rules.minimumReports}
+              min={1}
+              onChange={(value) => updateRule('minimumReports', value)}
+            />
+            <RuleField
+              label="Сколько последних выгрузок считать"
+              value={rules.observationReports}
+              min={1}
+              onChange={(value) => updateRule('observationReports', value)}
+            />
+            <RuleField
+              label="Сигнал «нет показов»: не больше"
+              value={rules.maximumImpressions}
+              onChange={(value) => updateRule('maximumImpressions', value)}
+            />
+            <RuleField
+              label="Сигнал «нет просмотров»: не больше"
+              value={rules.maximumViews}
+              onChange={(value) => updateRule('maximumViews', value)}
+            />
+            <RuleField
+              label="Проверять ноль контактов от"
+              value={rules.minimumViewsForContacts}
+              min={1}
+              suffix="просмотров"
+              onChange={(value) => updateRule('minimumViewsForContacts', value)}
+            />
+            <RuleField
+              label="Низкий охват: не больше от медианы подразделения"
+              value={Math.round(rules.maximumReachShare * 100)}
+              min={0}
+              max={100}
+              suffix="%"
+              onChange={(value) => updateRule('maximumReachShare', value / 100)}
             />
           </div>
-        </section>
-
-        <details className="insight-coverage panel">
-          <summary className="insight-coverage-summary">
-            <span className="eyebrow">ДОСТАТОЧНОСТЬ ДАННЫХ</span>
-            <ChevronDown />
-          </summary>
-          <div className="insight-coverage-details">
-            <p className="insight-coverage-note">
-              Проверки независимы: объявлению может хватать истории для анализа
-              показов, но не хватать просмотров для анализа контактов. Поэтому
-              числа причин могут пересекаться.
+          <div className="growth-rule-note">
+            <p>
+              Считаются только строки текущего номера в выбранном периоде.
+              Отсутствующая выгрузка не считается нулём. При новом ID история
+              оценки начинается заново.
             </p>
-            <div className="insight-coverage-stats">
-              <span>
-                <small>Активных объявлений</small>
-                <strong>{report.diagnostics.activeListings}</strong>
-              </span>
-              <span>
-                <small>Есть конкретный вывод</small>
-                <strong>{report.diagnostics.listingsWithConclusions}</strong>
-              </span>
-              <span>
-                <small>Стабильно слабых</small>
-                <strong>{report.diagnostics.persistentWeak}</strong>
-              </span>
-              <span>
-                <small>Достаточно истории, отклонений не найдено</small>
-                <strong>{report.diagnostics.observedWithoutIssue}</strong>
-              </span>
-              <span>
-                <small>Пока рано оценивать</small>
-                <strong>{report.diagnostics.insufficientHistory}</strong>
-              </span>
-            </div>
-            <div className="insight-exclusions">
-              <span>
-                <b>{report.diagnostics.lowVolume}</b>
-                мало трафика для оценки именно конверсии
-              </span>
-              <span>
-                <b>{report.diagnostics.structuralChecks}</b>
-                возможных дублей
-              </span>
-              <span>
-                <b>{Object.keys(demandByArticle).length}</b>
-                артикулов в аналитике товаров
-              </span>
-              <span>
-                <b>{Object.values(categoryByArticle).filter(Boolean).length}</b>
-                с категорией товара
-              </span>
-            </div>
-            <details className="insight-methodology">
-              <summary>
-                Как принимается решение
-                <ChevronDown />
-              </summary>
-              <div>
-                <p>
-                  Сначала проверяется полнота истории и объём данных. Затем
-                  последние четыре отчёта сравниваются с предыдущими, с другими
-                  объявлениями подразделения и, где возможно, с тем же артикулом
-                  минимум в двух других подразделениях.
-                </p>
-                <p>
-                  Длительное отсутствие результата оценивается отдельно. Ноль
-                  контактов за шесть и более отчётов — уже важный факт, даже
-                  если трафика ещё мало, чтобы обвинять именно конверсию.
-                </p>
-                <p>
-                  Для конверсий учитывается неопределённость маленькой выборки.
-                  После этого применяется общая защита от случайных находок,
-                  возникающих из-за одновременной проверки сотен объявлений.
-                </p>
-                <p>
-                  Даже статистически подтверждённое отличие показывается только
-                  при заметном практическом эффекте: небольшие колебания не
-                  становятся сигналами.
-                </p>
-              </div>
-            </details>
+            <button
+              type="button"
+              onClick={() => setRules(DEFAULT_GROWTH_RULES)}
+            >
+              Вернуть исходные пороги
+            </button>
           </div>
-        </details>
+        </div>
+      </details>
 
-        <section className="insight-list-panel panel">
-          <div className="insight-list-toolbar">
-            <div>
-              <span className="eyebrow">ПОДТВЕРЖДЁННЫЕ НАБЛЮДЕНИЯ</span>
-              <h2>{filtered.length} сигналов</h2>
-            </div>
-            <div>
-              <div className="insight-view-switch" aria-label="Фильтр сигналов">
-                {VIEW_FILTERS.map((item) => (
-                  <button
-                    key={item.value}
-                    className={`view-${item.value} ${view === item.value ? 'active' : ''}`}
-                    onClick={() => changeView(item.value)}
-                  >
-                    <span>{item.label}</span>
-                    <b>{viewCounts[item.value]}</b>
-                  </button>
-                ))}
-              </div>
-              <Picker
-                label="Причина сигнала"
-                value={effectiveKind}
-                onChange={(value) => changeKind(value as 'all' | InsightKind)}
-                items={kindChoices}
-                contentClassName="insight-reason-menu"
-                contentAlign="end"
-              />
-            </div>
+      <section className="growth-filters panel">
+        <label className="growth-search">
+          <Search />
+          <input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setVisibleCount(PAGE_SIZE);
+            }}
+            placeholder="Артикул, название или номер"
+          />
+        </label>
+        <Picker
+          label="Категория"
+          value={
+            categoryChoices.some((item) => item.value === category)
+              ? category
+              : 'all'
+          }
+          onChange={(value) => {
+            setCategory(value);
+            setVisibleCount(PAGE_SIZE);
+          }}
+          items={categoryChoices}
+        />
+        <label className="growth-range">
+          <span>Спрос</span>
+          <input
+            inputMode="decimal"
+            value={demandMin}
+            onChange={(event) => setDemandMin(event.target.value)}
+            placeholder="от"
+          />
+          <i>—</i>
+          <input
+            inputMode="decimal"
+            value={demandMax}
+            onChange={(event) => setDemandMax(event.target.value)}
+            placeholder="до"
+          />
+        </label>
+        <Picker
+          label="Тип сигнала"
+          value={
+            signalChoices.some((item) => item.value === signal) ? signal : 'all'
+          }
+          onChange={(value) => {
+            setSignal(value as 'all' | GrowthSignalKind);
+            setVisibleCount(PAGE_SIZE);
+          }}
+          items={signalChoices}
+          contentAlign="end"
+        />
+        <Picker
+          label="Моё решение"
+          value={decision}
+          onChange={(value) => {
+            setDecision(value as DecisionFilter);
+            setVisibleCount(PAGE_SIZE);
+          }}
+          items={decisionChoices}
+          contentAlign="end"
+        />
+        <button type="button" className="growth-reset" onClick={resetFilters}>
+          Сбросить
+        </button>
+      </section>
+
+      <section className="insight-list-panel panel growth-list-panel">
+        <div className="insight-list-toolbar growth-list-toolbar">
+          <div>
+            <span className="eyebrow">УНИКАЛЬНЫЕ ТОВАРЫ</span>
+            <h2>
+              {filtered.length} {filtered.length === 1 ? 'товар' : 'товаров'}
+            </h2>
           </div>
-          {filtered.length ? (
-            <div className="insight-list">
-              {displayed.map((insight) => (
-                <InsightCard
-                  key={insight.id}
-                  insight={insight}
-                  onOpenPart={onOpenPart}
-                  onOpenPartMetrics={onOpenPartMetrics}
-                  getPartHref={getPartHref}
-                  getPartMetricsHref={getPartMetricsHref}
-                  demandByArticle={demandByArticle}
-                  categoryByArticle={categoryByArticle}
-                />
-              ))}
-              {displayed.length < filtered.length && (
-                <button
-                  type="button"
-                  className="insight-load-more"
-                  onClick={showMore}
-                >
-                  Показать ещё{' '}
-                  {Math.min(PAGE_SIZE, filtered.length - displayed.length)} из{' '}
-                  {filtered.length - displayed.length}
-                  <ArrowRight />
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="insight-empty">
-              <ShieldCheck />
-              <h3>
-                {effectiveKind === 'duplicate'
-                  ? 'Возможные дубли не найдены'
-                  : 'Подтверждённых сигналов нет'}
-              </h3>
-              <p>
-                {effectiveKind === 'duplicate'
-                  ? 'В выбранном подразделении нет нескольких активных объявлений с одинаковым распознанным артикулом.'
-                  : 'Это не утверждение, что все объявления идеальны. Часть объявлений может не иметь достаточной истории или объёма для вывода.'}
-              </p>
-              {(view !== 'all' || kind !== 'all') && (
-                <button type="button" onClick={resetFilters}>
-                  Сбросить фильтры <ArrowRight />
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
-    </TooltipProvider>
+          <div className="insight-view-switch" aria-label="Состояние товаров">
+            {VIEW_FILTERS.map((item) => (
+              <button
+                key={item.value}
+                className={`view-${item.value} ${view === item.value ? 'active' : ''}`}
+                onClick={() => {
+                  setView(item.value);
+                  setVisibleCount(PAGE_SIZE);
+                }}
+              >
+                <span>{item.label}</span>
+                <b>{viewCounts[item.value]}</b>
+              </button>
+            ))}
+          </div>
+        </div>
+        {displayed.length ? (
+          <div className="insight-list growth-list">
+            {displayed.map((item) => (
+              <GrowthCard
+                key={item.generationKey}
+                item={item}
+                decision={decisions[item.generationKey] ?? 'unreviewed'}
+                rules={rules}
+                demandPopulation={Object.values(demandByArticle)}
+                onDecisionChange={(next) =>
+                  setDecisions((current) => ({
+                    ...current,
+                    [item.generationKey]: next,
+                  }))
+                }
+                onOpenPart={onOpenPart}
+                onOpenPartMetrics={onOpenPartMetrics}
+                getPartHref={getPartHref}
+                getPartMetricsHref={getPartMetricsHref}
+              />
+            ))}
+            {displayed.length < filtered.length && (
+              <button
+                type="button"
+                className="insight-load-more"
+                onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+              >
+                Показать ещё{' '}
+                {Math.min(PAGE_SIZE, filtered.length - displayed.length)}{' '}
+                <ArrowRight />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="insight-empty">
+            <ShieldCheck />
+            <h3>Товары не найдены</h3>
+            <p>
+              Измените фильтры или пороги правил. Отсутствие сигнала не
+              считается автоматической оценкой товара.
+            </p>
+            <button type="button" onClick={resetFilters}>
+              Сбросить фильтры <ArrowRight />
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

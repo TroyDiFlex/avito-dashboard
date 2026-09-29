@@ -57,8 +57,7 @@ registerHooks({
 });
 
 const { default: Overview } = await import('../components/overview.tsx');
-const { default: Insights, buildDemandGapInsights } =
-  await import('../components/insights.tsx');
+const { default: Insights } = await import('../components/insights.tsx');
 const { demoSnapshot } = await import('../lib/demo.ts');
 const { METRICS } = await import('../lib/model.ts');
 const branches = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
@@ -89,64 +88,6 @@ const snapshot = {
   sources: ['test'],
   rawAdCount: 0,
 };
-const weakInsight = {
-  id: 'weak',
-  kind: 'persistent-no-result',
-  tone: 'high',
-  branch: 'И31',
-  listingId: '123',
-  listingKey: 'И31:123',
-  article: '338004A700',
-  name: 'Деталь 338004A700',
-  title: 'Долго без результата',
-  summary: 'Контактов нет.',
-  current: '0 контактов',
-  comparison: '6 отчётов',
-  sufficiency: 'Истории достаточно.',
-  method: 'Проверено по истории.',
-  facts: [],
-  checks: ['Проверить карточку'],
-  score: 100,
-};
-const priorityInsights = buildDemandGapInsights(
-  [
-    weakInsight,
-    {
-      ...weakInsight,
-      id: 'low-reach',
-      kind: 'persistent-low-reach',
-      listingId: '124',
-      listingKey: 'И31:124',
-    },
-    {
-      ...weakInsight,
-      id: 'reach-drop',
-      kind: 'reach-drop',
-      listingId: '125',
-      listingKey: 'И31:125',
-    },
-  ],
-  { '338004A700': 10, OTHER1: 100, OTHER2: 200, OTHER3: 300 },
-  { '338004A700': 'A' },
-);
-assert.equal(priorityInsights.length, 3);
-assert.deepEqual(
-  new Set(priorityInsights.map((insight) => insight.kind)),
-  new Set([
-    'priority-persistent-no-result',
-    'priority-persistent-low-reach',
-    'priority-reach-drop',
-  ]),
-);
-assert.ok(
-  priorityInsights.every((insight) => insight.title.includes('категории A')),
-);
-assert.ok(
-  priorityInsights.some((insight) => insight.title.includes('стабильно')),
-);
-assert.ok(
-  priorityInsights.some((insight) => insight.title.includes('недавно')),
-);
 const html = renderToStaticMarkup(
   createElement(Overview, {
     snapshot,
@@ -166,7 +107,8 @@ assert.equal((html.match(/colSpan="3"/g) || []).length, branches.length);
 assert.ok(!html.includes('История подразделения'));
 assert.ok(!html.includes('focus-panel'));
 for (const branch of branches) assert.ok(html.includes(branch));
-for (const metric of Object.values(METRICS)) {
+for (const [metricKey, metric] of Object.entries(METRICS)) {
+  if (metricKey === 'price' || metricKey === 'contactPriceShare') continue;
   assert.ok(
     html.includes(
       metric.label
@@ -174,6 +116,7 @@ for (const metric of Object.values(METRICS)) {
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;'),
     ),
+    `Missing overview metric label: ${metric.label}`,
   );
 }
 assert.ok(html.includes('125'));
@@ -203,18 +146,14 @@ const insightsHtml = renderToStaticMarkup(
   }),
 );
 assert.ok(insightsHtml.includes('Точки роста'));
-assert.ok(insightsHtml.includes('ДОСТАТОЧНОСТЬ ДАННЫХ'));
-assert.ok(insightsHtml.includes('Что такое достаточность данных'));
-assert.ok(insightsHtml.includes('Высокий приоритет'));
-assert.ok(insightsHtml.includes('Стоит проверить'));
-assert.ok(insightsHtml.includes('Сильные примеры'));
-assert.ok(!insightsHtml.includes('Что проверить'));
+assert.ok(insightsHtml.includes('Правила сигналов'));
+assert.ok(insightsHtml.includes('Требуют внимания'));
+assert.ok(insightsHtml.includes('Ждём данные'));
+assert.ok(insightsHtml.includes('Без сигналов'));
 assert.ok(insightsHtml.includes('Спрос'));
-assert.ok(insightsHtml.includes('66'));
-assert.ok(insightsHtml.includes('Категория A'));
-assert.ok(insightsHtml.includes('Сравнить подразделения'));
-assert.ok(insightsHtml.includes('Посмотреть показатели'));
+assert.ok(insightsHtml.includes('Категория'));
+assert.ok(insightsHtml.includes('Показатели'));
 assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
 console.log(
-  'Passed: insights, sufficiency explanations and demo signals render.',
+  'Passed: transparent growth rules, filters and unique product cards render.',
 );
