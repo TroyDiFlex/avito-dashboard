@@ -827,11 +827,25 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .growth-category-actions button:hover { color: #fff; }
 .growth-category-option { min-height: 36px; display: flex; align-items: center; gap: 10px; padding: 6px 4px; font-size: 12px; cursor: pointer; }
 .growth-category-option input { width: 16px; height: 16px; accent-color: #ef3340; }
-.growth-reset, .growth-duplicates-button { height: 38px; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; color: #bcbcc5; background: #17171b; border: 1px solid #2e2e35; border-radius: 8px; font-size: 11px; white-space: nowrap; }
-.growth-reset:hover, .growth-duplicates-button:hover { color: #fff; border-color: #484851; }
-.growth-duplicates-button svg { width: 15px; height: 15px; }
-.growth-duplicates-button b { min-width: 20px; padding: 1px 5px; color: #eeeef0; background: #2b2b33; border-radius: 5px; font-size: 11px; }
-.growth-duplicates-button[aria-pressed='true'] { color: #ff939b; background: rgba(239, 51, 64, .1); border-color: rgba(239, 51, 64, .4); }
+.growth-reset { height: 38px; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; color: #bcbcc5; background: #17171b; border: 1px solid #2e2e35; border-radius: 8px; font-size: 11px; white-space: nowrap; }
+.growth-reset:hover { color: #fff; border-color: #484851; }
+.growth-mode-switch { display: flex; align-self: flex-start; gap: 4px; max-width: 100%; padding: 4px; background: #111115; border: 1px solid #2b2b32; border-radius: 9px; }
+.growth-mode-switch button { display: inline-flex; align-items: center; gap: 8px; min-height: 35px; padding: 0 12px; color: #92929c; background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 12px; }
+.growth-mode-switch button:hover { color: #f2f2f4; }
+.growth-mode-switch button[aria-pressed='true'] { color: #f2f2f4; background: #2a1b1f; border-color: #49242c; }
+.growth-mode-switch b { padding: 1px 5px; color: #bcbcc5; background: #25252d; border-radius: 4px; font-size: 10px; }
+.growth-signal-settings { min-width: 0; padding: 12px 14px; background: #131317; border: 1px solid #2b2b32; border-radius: 9px; }
+.growth-signal-settings > strong { display: block; margin-bottom: 10px; color: #d8d8de; font-size: 12px; font-weight: 600; }
+.growth-signal-thresholds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.growth-signal-thresholds label { min-width: 0; display: grid; align-content: start; gap: 5px; color: #92929c; font-size: 10px; }
+.growth-signal-thresholds input { width: 100%; min-width: 0; height: 32px; padding: 0 8px; color: #eeeef2; background: #0e0e12; border: 1px solid #33333c; border-radius: 6px; font-size: 12px; }
+.growth-signal-settings > p { margin-top: 9px; color: #85858e; font-size: 10px; line-height: 1.45; }
+.growth-signal { display: grid; gap: 3px; padding: 9px 16px; border-top: 1px solid #302329; color: #ffb3b8; background: rgba(239, 51, 64, .04); }
+.growth-signal.is-positive { color: #a3dbb5; background: rgba(34, 197, 94, .035); border-color: #23332a; }
+.growth-signal strong { font-size: 12px; font-weight: 600; }
+.growth-signal p { color: #96969f; font-size: 11px; line-height: 1.5; }
+.growth-card.has-positive-signals::before { background: #4eaa6d; }
+.growth-card.has-negative-signals::before { background: #ef3340; }
 .growth-range-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 .growth-range-grid.with-extra { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .growth-range-field { min-width: 0; padding: 12px 14px; background: #131317; border: 1px solid #2b2b32; border-radius: 9px; }
@@ -1282,6 +1296,9 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   .growth-title-row {
     flex-direction: column;
   }
+  .growth-mode-switch { width: 100%; gap: 2px; }
+  .growth-mode-switch button { flex: 1; min-width: 0; justify-content: center; gap: 4px; padding: 0 5px; font-size: 11px; }
+  .growth-mode-switch b { padding: 1px 3px; font-size: 9px; }
   .growth-card-actions {
     justify-content: flex-start;
   }

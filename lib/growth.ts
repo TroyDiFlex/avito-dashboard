@@ -1,6 +1,17 @@
 import { demandForArticle, normalizeDemandArticle } from './demand';
 import { adKey, extractArticle } from './explore';
 import { aggregate, type AdRow, type Snapshot } from './model';
+import {
+  buildGrowthSignals,
+  DEFAULT_SIGNAL_RULES,
+  GROWTH_SIGNAL_TYPES,
+  restoreSignalRules,
+  type GrowthSignal,
+  type GrowthSignalKind,
+  type GrowthSignalRules,
+} from './growth-signals';
+
+export type GrowthMode = 'selection' | 'signals' | 'duplicates';
 
 export type GrowthMetric =
   | 'impressions'
@@ -31,7 +42,9 @@ export interface GrowthFilters {
   metric: GrowthMetricFilter;
   extra: GrowthMetricFilter | null;
   search: string;
-  duplicatesOnly: boolean;
+  mode: GrowthMode;
+  signalKinds: GrowthSignalKind[] | null;
+  signalRules: GrowthSignalRules;
 }
 
 export function defaultGrowthFilters(scope = 'network'): GrowthFilters {
@@ -42,7 +55,9 @@ export function defaultGrowthFilters(scope = 'network'): GrowthFilters {
     metric: { metric: 'views', min: '', max: '' },
     extra: null,
     search: '',
-    duplicatesOnly: false,
+    mode: 'selection',
+    signalKinds: null,
+    signalRules: { ...DEFAULT_SIGNAL_RULES },
   };
 }
 
@@ -84,6 +99,29 @@ export function restoreGrowthFilters(
   }
   const scope = text('scope', saved.scope, fallback.scope);
   const extraMetric = text('growthExtraMetric', extra.metric);
+  const mode = text(
+    'growthMode',
+    saved.mode,
+    saved.duplicatesOnly === true ? 'duplicates' : 'selection',
+  );
+  let signalKinds = saved.signalKinds;
+  if (params.has('growthSignalKinds')) {
+    try {
+      signalKinds = JSON.parse(params.get('growthSignalKinds')!);
+    } catch {
+      signalKinds = null;
+    }
+  }
+  const signalRules = restoreSignalRules(object(saved.signalRules));
+  for (const [key, param] of [
+    ['reach', 'growthReachFloor'],
+    ['viewRate', 'growthViewFloor'],
+    ['contactRate', 'growthContactFloor'],
+  ] as const) {
+    const value = params.get(param);
+    if (value != null && parseGrowthBound(value) != null)
+      signalRules[key] = Number(value.replace(',', '.'));
+  }
   return {
     scope: scope === 'network' || branches.includes(scope) ? scope : 'network',
     categories: Array.isArray(categories)
@@ -106,11 +144,13 @@ export function restoreGrowthFilters(
         }
       : null,
     search: text('growthSearch', saved.search),
-    duplicatesOnly:
-      text(
-        'growthMode',
-        saved.duplicatesOnly === true ? 'duplicates' : 'all',
-      ) === 'duplicates',
+    mode: mode === 'duplicates' || mode === 'signals' ? mode : 'selection',
+    signalKinds: Array.isArray(signalKinds)
+      ? signalKinds.filter((value): value is GrowthSignalKind =>
+          GROWTH_SIGNAL_TYPES.some((item) => item.value === value),
+        )
+      : null,
+    signalRules: restoreSignalRules(signalRules),
   };
 }
 
@@ -128,6 +168,7 @@ export interface GrowthListing {
   latestImpressions: number | null;
   latestViews: number | null;
   latestContacts: number | null;
+  signals: GrowthSignal[];
 }
 
 export interface GrowthCase extends GrowthListing {
@@ -155,6 +196,7 @@ export function buildGrowthCases(
     branches: string[];
     demandByArticle: Record<string, number | null>;
     categoryByArticle: Record<string, string | null>;
+    signalRules?: GrowthSignalRules;
   },
 ): GrowthCase[] {
   const byListing = new Map<string, AdRow[]>();
@@ -170,10 +212,7 @@ export function buildGrowthCases(
     dates.set(row.branch, branchDates);
   });
   const reportDates = new Map(
-    [...dates].map(([branch, values]) => [
-      branch,
-      [...values].sort().slice(-2),
-    ]),
+    [...dates].map(([branch, values]) => [branch, [...values].sort()]),
   );
   const products = new Map<
     string,
@@ -199,7 +238,11 @@ export function buildGrowthCases(
   });
   const cases: GrowthCase[] = [];
   products.forEach((product, key) => {
-    const lastTwo = reportDates.get(product.branch)!;
+    const branchDates = reportDates.get(product.branch)!;
+    const lastTwo = branchDates.slice(-2);
+    const selectedDates = branchDates.filter(
+      (date) => date >= options.from && date <= options.to,
+    );
     const latestDate = lastTwo.at(-1)!;
     const current = product.rows.filter(
       (rows) => rows.at(-1)!.end === latestDate,
@@ -231,6 +274,11 @@ export function buildGrowthCases(
         latestImpressions: latest.metrics.impressions ?? null,
         latestViews: latest.metrics.views ?? null,
         latestContacts: latest.metrics.contacts ?? null,
+        signals: buildGrowthSignals(
+          selected,
+          selectedDates,
+          options.signalRules ?? DEFAULT_SIGNAL_RULES,
+        ),
       } satisfies GrowthListing;
     });
     const normalized = product.article
@@ -348,7 +396,8 @@ export function filterGrowthCases(
   cases: GrowthCase[],
   filters: GrowthFilters,
 ): GrowthCase[] {
-  if (filters.duplicatesOnly) return cases.filter((item) => item.isDuplicate);
+  if (filters.mode === 'duplicates')
+    return cases.filter((item) => item.isDuplicate);
   const search = filters.search.trim().toLocaleLowerCase('ru');
   return cases.filter((item) => {
     if (filters.scope !== 'network' && item.branch !== filters.scope)
@@ -359,7 +408,16 @@ export function filterGrowthCases(
     )
       return false;
     if (!matchesRange(item.demand, filters.demand)) return false;
-    if (
+    if (filters.mode === 'signals') {
+      if (
+        !item.signals.some(
+          (signal) =>
+            filters.signalKinds === null ||
+            filters.signalKinds.includes(signal.kind),
+        )
+      )
+        return false;
+    } else if (
       !matchesRange(
         growthMetricValue(item, filters.metric.metric),
         filters.metric,
@@ -367,6 +425,7 @@ export function filterGrowthCases(
     )
       return false;
     if (
+      filters.mode === 'selection' &&
       filters.extra &&
       !matchesRange(
         growthMetricValue(item, filters.extra.metric),

@@ -4,7 +4,7 @@ import ts from 'typescript';
 import { resolveThumbCollision } from '../node_modules/@base-ui/react/slider/utils/resolveThumbCollision.js';
 
 await fs.mkdir('private/compiled', { recursive: true });
-for (const name of ['model', 'explore', 'demand', 'growth']) {
+for (const name of ['model', 'explore', 'demand', 'growth-signals', 'growth']) {
   const source = await fs.readFile(`lib/${name}.ts`, 'utf8');
   const output = ts
     .transpileModule(source, {
@@ -15,6 +15,7 @@ for (const name of ['model', 'explore', 'demand', 'growth']) {
     })
     .outputText.replaceAll("'./model'", "'./model.js'")
     .replaceAll("'./explore'", "'./explore.js'")
+    .replaceAll("'./growth-signals'", "'./growth-signals.js'")
     .replaceAll("'./demand'", "'./demand.js'");
   await fs.writeFile(`private/compiled/${name}.js`, output);
 }
@@ -306,7 +307,7 @@ const restrictive = {
 const saved = JSON.stringify(restrictive);
 assert.equal(filterGrowthCases(duplicate, restrictive).length, 0);
 assert.equal(
-  filterGrowthCases(duplicate, { ...restrictive, duplicatesOnly: true }).length,
+  filterGrowthCases(duplicate, { ...restrictive, mode: 'duplicates' }).length,
   1,
   'Duplicate mode must bypass scope, categories, search and all ranges, even invalid ones.',
 );
@@ -346,12 +347,12 @@ assert.deepEqual(
   { metric: 'views', min: '500', max: '500' },
 );
 const restored = restoreGrowthFilters(
-  JSON.parse(JSON.stringify({ ...restrictive, duplicatesOnly: true })),
+  JSON.parse(JSON.stringify({ ...restrictive, mode: 'duplicates' })),
   new URLSearchParams(),
   'И31',
   ['И31', 'Х7'],
 );
-assert.deepEqual(restored, { ...restrictive, duplicatesOnly: true });
+assert.deepEqual(restored, { ...restrictive, mode: 'duplicates' });
 const legacy = restoreGrowthFilters(
   {
     category: 'A',
@@ -366,7 +367,7 @@ const legacy = restoreGrowthFilters(
 );
 assert.deepEqual(legacy.categories, ['A']);
 assert.deepEqual(legacy.demand, { min: '100', max: '200' });
-assert.equal(legacy.duplicatesOnly, false);
+assert.equal(legacy.mode, 'selection');
 assert.deepEqual(
   restoreGrowthFilters(
     {},
@@ -405,6 +406,216 @@ for (const values of [
     assert.ok(result.value.every((value) => value >= 0 && value <= 500));
   }
 }
+function signalRows(values, metric = 'impressions', overrides = {}) {
+  return values.map((value, index) =>
+    ad({
+      id: '777',
+      end: weeks[index],
+      impressions: 1000,
+      views: 100,
+      contacts: 10,
+      [metric]: value,
+      ...overrides,
+    }),
+  );
+}
+for (const [metric, values, expected] of [
+  ['impressions', [1000, 1000, 1000, 1000, 100, 100], 'recent-decline'],
+  ['impressions', [1000, 1000, 1000, 1000, 100, 100, 100, 100], 'long-decline'],
+  ['views', [100, 100, 100, 100, 10, 10], 'recent-decline'],
+  ['contacts', [20, 20, 20, 20, 0, 0], 'recent-decline'],
+  ['views', [20, 20, 20, 20, 80, 80], 'improvement'],
+  ['contacts', [0, 0, 0, 0, 10, 10], 'improvement'],
+  ['contacts', [0, 0, 0, 0, 10, 10, 10, 10], 'improvement'],
+  ['contacts', [0, 0, 0, 0], 'no-contacts'],
+  ['impressions', [1000, 1000, 1000, 1000], 'stable-good'],
+]) {
+  const item = cases(signalRows(values, metric))[0];
+  assert.ok(
+    item.signals.some((signal) => signal.kind === expected),
+    `${String(metric)}: ${String(expected)}`,
+  );
+  assert.ok(
+    item.signals.every((signal) => !/NaN|Infinity/.test(signal.explanation)),
+  );
+}
+const weak = cases(
+  signalRows([5, 5, 5, 5], 'impressions', { views: 0, contacts: 0 }),
+);
+assert.ok(weak[0].signals.some((signal) => signal.kind === 'low-reach'));
+assert.ok(
+  cases(signalRows([5, 5, 5, 5], 'views', { contacts: 0 }))[0].signals.some(
+    (signal) => signal.kind === 'low-rates',
+  ),
+);
+assert.deepEqual(cases(signalRows([1000, 1000, 1000]))[0].signals, []);
+assert.deepEqual(
+  cases(
+    signalRows([20, 20, 20, 20], 'impressions', { views: 1, contacts: 1 }),
+  )[0].signals,
+  [],
+  'A few views/contacts are insufficient for a stable positive conversion signal.',
+);
+const weightedSignal = cases(
+  [100, 900, 100, 900].map((impressions, index) =>
+    ad({
+      id: '777',
+      end: weeks[index],
+      impressions,
+      views: index % 2 ? 9 : 10,
+      contacts: 0,
+    }),
+  ),
+  { signalRules: { reach: 20, viewRate: 20, contactRate: 3 } },
+)[0].signals.find(
+  (signal) => signal.title === 'Стабильно низкая доля просмотров',
+);
+assert.ok(
+  weightedSignal?.explanation.includes('За период: 1,9%.'),
+  'Signal rates must weight actual trials, not average weekly percentages.',
+);
+const gapHistory = signalRows([
+  1000, 1000, 1000, 1000, 1000, 1000, 100, 100,
+]).filter((_, index) => index !== 6);
+assert.ok(
+  !cases([
+    ...gapHistory,
+    ad({ id: '900', end: weeks[6], article: '22221432928' }),
+  ])
+    .find((item) => item.id === '777')
+    .signals.some(
+      (signal) =>
+        signal.kind === 'recent-decline' || signal.kind === 'long-decline',
+    ),
+  'A missing penultimate report cannot confirm a two-report decline.',
+);
+assert.deepEqual(
+  cases(
+    signalRows([1000, 1000, 1000, 1000], 'impressions', {
+      views: null,
+      contacts: null,
+    }),
+  )[0].signals,
+  [],
+);
+assert.ok(
+  !cases(signalRows([1000, 100, 100, 100, 100, 100]))[0].signals.some(
+    (signal) => signal.title.startsWith('Показы:'),
+  ),
+  'One isolated historical spike is not a sustained high baseline.',
+);
+assert.deepEqual(
+  cases(signalRows([1000, 1000, 1000, 1000]), { from: weeks[2] })[0].signals,
+  [],
+  'Signals cannot borrow history from outside the selected period.',
+);
+const sparse = signalRows([5, 5, 5, 5], 'impressions', {
+  views: 0,
+  contacts: 0,
+}).map((row, index) => ({ ...row, end: weeks[[0, 2, 4, 7][index]] }));
+assert.deepEqual(
+  cases([
+    ...sparse,
+    ...weeks
+      .slice(0, 8)
+      .map((end) => ad({ id: '900', end, article: '22221432928' })),
+  ]).find((item) => item.id === '777').signals,
+  [],
+  'Sparse observations must not be presented as a continuous stable result.',
+);
+const replacement = cases([
+  ...signalRows([5, 5, 5, 5], 'impressions', {
+    id: '666',
+    views: 0,
+    contacts: 0,
+  }),
+  ...signalRows([1000, 1000, 1000, 1000]).map((row, index) => ({
+    ...row,
+    end: weeks[index + 4],
+  })),
+])[0];
+assert.equal(replacement.primaryId, '777');
+assert.ok(replacement.signals.some((signal) => signal.kind === 'stable-good'));
+assert.ok(
+  !replacement.signals.some((signal) => signal.kind === 'low-reach'),
+  'The old ID history must not affect a replacement.',
+);
+assert.ok(
+  !cases(signalRows([5, 5, 5, 5], 'impressions', { views: 0, contacts: 0 }), {
+    signalRules: { reach: 1, viewRate: 1, contactRate: 3 },
+  })[0].signals.some((signal) => signal.kind === 'low-reach'),
+  'Visible user thresholds must control stable classifications.',
+);
+const signalFilters = {
+  ...defaultGrowthFilters(),
+  mode: 'signals',
+  signalKinds: ['low-reach'],
+  categories: ['A'],
+  demand: { min: '100', max: '200' },
+  metric: { metric: 'views', min: '9999', max: '10000' },
+  extra: { metric: 'viewRate', min: '9999', max: '10000' },
+};
+assert.equal(
+  filterGrowthCases(weak, signalFilters).length,
+  1,
+  'Hidden manual metric ranges must not affect signals.',
+);
+for (const patch of [
+  { categories: ['B'] },
+  { categories: [] },
+  { demand: { min: '200', max: '300' } },
+  { signalKinds: [] },
+  { signalKinds: ['stable-good'] },
+  { scope: 'Х7' },
+  { search: 'not found' },
+])
+  assert.equal(
+    filterGrowthCases(weak, { ...signalFilters, ...patch }).length,
+    0,
+    JSON.stringify(patch),
+  );
+assert.deepEqual(
+  restoreGrowthFilters(
+    {
+      ...signalFilters,
+      signalRules: { reach: 50, viewRate: 2.5, contactRate: 10 },
+    },
+    new URLSearchParams(),
+    'И31',
+    ['И31', 'Х7'],
+  ),
+  {
+    ...signalFilters,
+    signalRules: { reach: 50, viewRate: 2.5, contactRate: 10 },
+  },
+);
+assert.equal(
+  restoreGrowthFilters({ duplicatesOnly: true }, new URLSearchParams(), 'И31', [
+    'И31',
+  ]).mode,
+  'duplicates',
+  'Old saved duplicate mode must migrate.',
+);
+const recovered = restoreGrowthFilters(
+  {
+    mode: 'invalid',
+    signalKinds: ['bad', 'low-reach'],
+    signalRules: { reach: -1, viewRate: Infinity, contactRate: 200 },
+  },
+  new URLSearchParams('growthViewFloor=2,5'),
+  'И31',
+  ['И31'],
+);
+assert.equal(recovered.mode, 'selection');
+assert.deepEqual(recovered.signalKinds, ['low-reach']);
+assert.deepEqual(recovered.signalRules, {
+  reach: 20,
+  viewRate: 2.5,
+  contactRate: 100,
+});
+console.log(
+  'Passed: recent/long declines, improvements, stable results, transparent thresholds, sparse/missing data, current-ID history, signal filters and mode migration.',
+);
 console.log(
   'Passed: latest-report roster, full-period metrics, weighted conversions, persistent ID pairs, independent duplicate mode, filter persistence, observed slider ceilings and coincident-thumb separation.',
 );

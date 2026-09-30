@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import {
   ArrowRight,
+  Activity,
   Check,
   ChevronDown,
   Copy,
@@ -11,6 +12,7 @@ import {
   Layers3,
   Plus,
   Search,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { Slider } from '@base-ui/react/slider';
@@ -44,6 +46,12 @@ import {
   type GrowthMetricFilter,
   type GrowthRange,
 } from '@/lib/growth';
+import {
+  GROWTH_SIGNAL_TYPES,
+  restoreSignalRules,
+  type GrowthSignal,
+  type GrowthSignalRules,
+} from '@/lib/growth-signals';
 import {
   dateRangeLabel,
   format,
@@ -182,38 +190,45 @@ function RangeField({
   );
 }
 
-function CategoryPicker({
+function MultiPicker<T extends string>({
+  label,
+  allLabel,
   choices,
   selected,
   onChange,
 }: {
-  choices: string[];
-  selected: string[] | null;
-  onChange: (value: string[] | null) => void;
+  label: string;
+  allLabel: string;
+  choices: readonly { value: T; label: string }[];
+  selected: T[] | null;
+  onChange: (value: T[] | null) => void;
 }) {
-  const label =
+  const selectedLabel =
     selected === null
-      ? 'Все категории'
+      ? allLabel
       : !selected.length
-        ? 'Категории не выбраны'
+        ? 'Ничего не выбрано'
         : selected.length > 2
-          ? `Категории: ${selected.length}`
+          ? `${label}: ${selected.length}`
           : selected
-              .map((value) =>
-                value === NO_GROWTH_CATEGORY ? 'Без категории' : value,
+              .map(
+                (value) =>
+                  choices.find((choice) => choice.value === value)?.label ??
+                  value,
               )
               .join(', ');
   return (
     <Popover>
       <PopoverTrigger
         className="growth-category-trigger"
-        aria-label="Категории"
+        aria-label={label}
+        title={selectedLabel}
       >
-        <span>{label}</span>
+        <span>{selectedLabel}</span>
         <ChevronDown />
       </PopoverTrigger>
       <PopoverContent className="growth-category-menu" align="start">
-        <PopoverTitle className="sr-only">Категории</PopoverTitle>
+        <PopoverTitle className="sr-only">{label}</PopoverTitle>
         <div className="growth-category-actions">
           <button type="button" onClick={() => onChange(null)}>
             Выбрать все
@@ -222,13 +237,14 @@ function CategoryPicker({
             Снять все
           </button>
         </div>
-        {choices.map((value) => (
+        {choices.map(({ value, label: choiceLabel }) => (
           <label className="growth-category-option" key={value}>
             <input
               type="checkbox"
               checked={selected === null || selected.includes(value)}
               onChange={(event) => {
-                const current = selected ?? choices;
+                const current =
+                  selected ?? choices.map((choice) => choice.value);
                 onChange(
                   event.target.checked
                     ? [...new Set([...current, value])]
@@ -236,11 +252,7 @@ function CategoryPicker({
                 );
               }}
             />
-            <span>
-              {value === NO_GROWTH_CATEGORY
-                ? 'Без категории'
-                : `Категория ${value}`}
-            </span>
+            <span>{choiceLabel}</span>
           </label>
         ))}
       </PopoverContent>
@@ -248,9 +260,58 @@ function CategoryPicker({
   );
 }
 
+function SignalSettings({
+  rules,
+  onChange,
+}: {
+  rules: GrowthSignalRules;
+  onChange: (rules: GrowthSignalRules) => void;
+}) {
+  return (
+    <section className="growth-signal-settings" aria-label="Пороги сигналов">
+      <strong>Пороги сигналов</strong>
+      <div className="growth-signal-thresholds">
+        {(
+          [
+            ['reach', 'Показы за выгрузку, от'],
+            ['viewRate', 'Доля просмотров, от %'],
+            ['contactRate', 'Доля контактов, от %'],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key}>
+            <span>{label}</span>
+            <input
+              type="number"
+              min={0}
+              max={key === 'reach' ? undefined : 100}
+              step={key === 'reach' ? 1 : 0.1}
+              value={rules[key]}
+              onChange={(event) =>
+                onChange(
+                  restoreSignalRules({
+                    ...rules,
+                    [key]: Number(event.target.value),
+                  }),
+                )
+              }
+            />
+          </label>
+        ))}
+      </div>
+      <p>
+        Стабильно — минимум 4 выгрузки, порог выполняется в 75% из них. Снижение
+        — минимум 50% в двух последних выгрузках; длительное — в четырёх.
+        Улучшение — минимум 50% относительно прежнего устойчивого уровня. Для
+        конверсии нужны минимум 200 показов или 30 просмотров.
+      </p>
+    </section>
+  );
+}
+
 function GrowthCard({
   item,
   duplicatesOnly,
+  signals = [],
   demandPopulation,
   onOpenPart,
   onOpenPartMetrics,
@@ -259,6 +320,7 @@ function GrowthCard({
 }: {
   item: GrowthCase;
   duplicatesOnly: boolean;
+  signals?: GrowthSignal[];
   demandPopulation: Array<number | null>;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   onOpenPartMetrics: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
@@ -288,13 +350,27 @@ function GrowthCard({
   const listings = duplicatesOnly
     ? item.listings.filter((listing) => item.duplicateIds.includes(listing.id))
     : item.listings;
+  const positive =
+    signals.length > 0 && signals.every((signal) => signal.positive);
+  const state = item.isDuplicate
+    ? 'is-duplicate'
+    : signals.length
+      ? positive
+        ? 'has-positive-signals'
+        : 'has-negative-signals'
+      : '';
+  const Icon = item.isDuplicate
+    ? Layers3
+    : signals.length
+      ? positive
+        ? TrendingUp
+        : Activity
+      : Eye;
   return (
-    <article
-      className={`growth-card ${item.isDuplicate ? 'is-duplicate' : ''}`}
-    >
+    <article className={`growth-card ${state}`}>
       <header className="growth-card-header">
         <span className="growth-card-icon">
-          {item.isDuplicate ? <Layers3 /> : <Eye />}
+          <Icon />
         </span>
         <div className="growth-card-heading">
           <div className="growth-card-tags">
@@ -411,6 +487,19 @@ function GrowthCard({
             <small>Выгрузок в периоде</small>
             <strong>{item.reportCount}</strong>
           </span>
+        </div>
+      )}
+      {signals.length > 0 && (
+        <div className="growth-signal-findings">
+          {signals.map((signal) => (
+            <div
+              className={`growth-signal ${signal.positive ? 'is-positive' : ''}`}
+              key={`${signal.kind}:${signal.title}`}
+            >
+              <strong>{signal.title}</strong>
+              <p>{signal.explanation}</p>
+            </div>
+          ))}
         </div>
       )}
       {item.isDuplicate && (
@@ -541,6 +630,8 @@ export default function Insights({
     ),
   );
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const duplicatesOnly = storedFilters.mode === 'duplicates';
+  const signalsOnly = storedFilters.mode === 'signals';
   const scope =
     storedFilters.scope === 'network' ||
     availableBranches.includes(storedFilters.scope)
@@ -554,8 +645,17 @@ export default function Insights({
         branches: availableBranches,
         demandByArticle,
         categoryByArticle,
+        signalRules: storedFilters.signalRules,
       }),
-    [snapshot, from, to, availableBranches, demandByArticle, categoryByArticle],
+    [
+      snapshot,
+      from,
+      to,
+      availableBranches,
+      demandByArticle,
+      categoryByArticle,
+      storedFilters.signalRules,
+    ],
   );
   const scoped = useMemo(
     () => cases.filter((item) => scope === 'network' || item.branch === scope),
@@ -578,14 +678,21 @@ export default function Insights({
     [storedFilters, demandMax, metricMax, extraMax],
   );
   useEffect(() => {
-    onDuplicateModeChange?.(filters.duplicatesOnly);
+    onDuplicateModeChange?.(duplicatesOnly);
     return () => onDuplicateModeChange?.(false);
-  }, [filters.duplicatesOnly, onDuplicateModeChange]);
+  }, [duplicatesOnly, onDuplicateModeChange]);
   useEffect(() => {
     saveBrowserPreference(FILTERS_KEY, { ...filters, scope });
     replaceUrlParameters({
       scope,
-      growthMode: filters.duplicatesOnly ? 'duplicates' : null,
+      growthMode: filters.mode === 'selection' ? null : filters.mode,
+      growthSignalKinds:
+        filters.signalKinds === null
+          ? null
+          : JSON.stringify(filters.signalKinds),
+      growthReachFloor: String(filters.signalRules.reach),
+      growthViewFloor: String(filters.signalRules.viewRate),
+      growthContactFloor: String(filters.signalRules.contactRate),
       growthCategories:
         filters.categories === null ? null : JSON.stringify(filters.categories),
       growthDemandMin: filters.demand.min || null,
@@ -607,8 +714,10 @@ export default function Insights({
     setFilters({ ...filters, ...patch });
     setVisibleCount(PAGE_SIZE);
   };
-  const reset = () => update(defaultGrowthFilters(scope));
+  const reset = () =>
+    update({ ...defaultGrowthFilters(scope), mode: filters.mode });
   const duplicates = cases.filter((item) => item.isDuplicate);
+  const signalsCount = scoped.filter((item) => item.signals.length > 0).length;
   const filtered = filterGrowthCases(cases, { ...filters, scope }).sort(
     (left, right) =>
       Number(right.category === 'A') - Number(left.category === 'A') ||
@@ -648,23 +757,47 @@ export default function Insights({
   );
   return (
     <div
-      className={`insights-page growth-page ${filters.duplicatesOnly ? 'duplicates-mode' : ''}`}
+      className={`insights-page growth-page ${duplicatesOnly ? 'duplicates-mode' : ''}`}
     >
+      <nav className="growth-mode-switch" aria-label="Режим точек роста">
+        {(
+          [
+            ['selection', 'Отбор', scoped.length],
+            ['signals', 'Сигналы', signalsCount],
+            ['duplicates', 'Дубли', duplicates.length],
+          ] as const
+        ).map(([mode, label, count]) => (
+          <button
+            type="button"
+            key={mode}
+            aria-pressed={filters.mode === mode}
+            onClick={() => update({ mode })}
+          >
+            {label} <b>{count}</b>
+          </button>
+        ))}
+      </nav>
       <section className="catalog-header insights-header growth-header">
         <div>
           <span className="eyebrow">
-            {filters.duplicatesOnly
+            {duplicatesOnly
               ? 'ДВА ПОСЛЕДНИХ НЕДЕЛЬНЫХ ОТЧЁТА'
-              : 'ОТБОР ОБЪЯВЛЕНИЙ'}
+              : signalsOnly
+                ? 'АНАЛИЗ ИСТОРИИ ОБЪЯВЛЕНИЙ'
+                : 'ОТБОР ОБЪЯВЛЕНИЙ'}
           </span>
-          <h2>{filters.duplicatesOnly ? 'Дубли' : 'Точки роста'}</h2>
+          <h2>
+            {duplicatesOnly ? 'Дубли' : signalsOnly ? 'Сигналы' : 'Точки роста'}
+          </h2>
           <p>
-            {filters.duplicatesOnly
+            {duplicatesOnly
               ? 'Одни и те же ID с одним артикулом в двух последних выгрузках одного подразделения. Показаны все найденные дубли.'
-              : 'Один артикул в подразделении — одна карточка. В списке только объявления из последней выгрузки; показатели текущего номера — за выбранный период.'}
+              : signalsOnly
+                ? 'История текущего ID за выбранный период: устойчиво низкие или хорошие показатели, снижение и улучшение. В карточке указаны данные, на которых основан сигнал.'
+                : 'Один артикул в подразделении — одна карточка. В списке только объявления из последней выгрузки; показатели текущего номера — за выбранный период.'}
           </p>
         </div>
-        {!filters.duplicatesOnly && (
+        {!duplicatesOnly && (
           <div className="insights-scope-picker">
             <span>Подразделение</span>
             <Picker
@@ -679,101 +812,104 @@ export default function Insights({
           </div>
         )}
       </section>
-      <section className="growth-filters panel">
-        <div className="growth-filter-toolbar">
-          {!filters.duplicatesOnly && (
-            <>
-              <label className="growth-search">
-                <Search />
-                <input
-                  value={filters.search}
-                  onChange={(event) => update({ search: event.target.value })}
-                  placeholder="Артикул, название или номер"
-                  aria-label="Поиск объявления"
-                />
-              </label>
-              <CategoryPicker
-                choices={choices}
-                selected={filters.categories}
-                onChange={(categories) => update({ categories })}
+      {!duplicatesOnly && (
+        <section className="growth-filters panel">
+          <div className="growth-filter-toolbar">
+            <label className="growth-search">
+              <Search />
+              <input
+                value={filters.search}
+                onChange={(event) => update({ search: event.target.value })}
+                placeholder="Артикул, название или номер"
+                aria-label="Поиск объявления"
               />
-            </>
-          )}
-          <button
-            type="button"
-            className="growth-duplicates-button"
-            aria-pressed={filters.duplicatesOnly}
-            onClick={() => update({ duplicatesOnly: !filters.duplicatesOnly })}
-          >
-            <Layers3 />
-            Дубли <b>{duplicates.length}</b>
-          </button>
-          {filters.duplicatesOnly ? (
-            <button
-              type="button"
-              className="growth-reset"
-              onClick={() => update({ duplicatesOnly: false })}
-            >
-              Вернуться к отбору
-            </button>
-          ) : (
+            </label>
+            <MultiPicker
+              label="Категории"
+              allLabel="Все категории"
+              choices={choices.map((value) => ({
+                value,
+                label:
+                  value === NO_GROWTH_CATEGORY
+                    ? 'Без категории'
+                    : `Категория ${value}`,
+              }))}
+              selected={filters.categories}
+              onChange={(categories) => update({ categories })}
+            />
+            {signalsOnly && (
+              <MultiPicker
+                label="Сигналы"
+                allLabel="Все сигналы"
+                choices={GROWTH_SIGNAL_TYPES}
+                selected={filters.signalKinds}
+                onChange={(signalKinds) => update({ signalKinds })}
+              />
+            )}
             <button type="button" className="growth-reset" onClick={reset}>
               Сбросить
             </button>
-          )}
-        </div>
-        {!filters.duplicatesOnly && (
-          <>
-            <div
-              className={`growth-range-grid ${filters.extra ? 'with-extra' : ''}`}
-            >
-              <RangeField
-                label="Спрос"
-                range={filters.demand}
-                ceiling={demandMax}
-                onChange={(demand) => update({ demand })}
+          </div>
+          <div
+            className={`growth-range-grid ${!signalsOnly && filters.extra ? 'with-extra' : ''}`}
+          >
+            <RangeField
+              label="Спрос"
+              range={filters.demand}
+              ceiling={demandMax}
+              onChange={(demand) => update({ demand })}
+            />
+            {signalsOnly ? (
+              <SignalSettings
+                rules={filters.signalRules}
+                onChange={(signalRules) => update({ signalRules })}
               />
-              {metricRange('metric', filters.metric, metricMax)}
-              {filters.extra && metricRange('extra', filters.extra, extraMax)}
-            </div>
-            <div className="growth-filter-footer">
-              <span>
-                Показатели: {dateRangeLabel(from, to)} · только текущий ID
-              </span>
-              {!filters.extra && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({
-                      extra: {
-                        metric:
-                          filters.metric.metric === 'viewRate'
-                            ? 'impressions'
-                            : 'viewRate',
-                        min: '',
-                        max: '',
-                      },
-                    })
-                  }
-                >
-                  <Plus />
-                  Добавить показатель
-                </button>
-              )}
-            </div>
-          </>
-        )}
-      </section>
+            ) : (
+              <>
+                {metricRange('metric', filters.metric, metricMax)}
+                {filters.extra && metricRange('extra', filters.extra, extraMax)}
+              </>
+            )}
+          </div>
+          <div className="growth-filter-footer">
+            <span>
+              Показатели: {dateRangeLabel(from, to)} · только текущий ID
+            </span>
+            {!signalsOnly && !filters.extra && (
+              <button
+                type="button"
+                onClick={() =>
+                  update({
+                    extra: {
+                      metric:
+                        filters.metric.metric === 'viewRate'
+                          ? 'impressions'
+                          : 'viewRate',
+                      min: '',
+                      max: '',
+                    },
+                  })
+                }
+              >
+                <Plus />
+                Добавить показатель
+              </button>
+            )}
+          </div>
+        </section>
+      )}
       <section className="insight-list-panel panel growth-list-panel">
         <div className="insight-list-toolbar growth-list-toolbar">
           <div>
             <span className="eyebrow">
-              {filters.duplicatesOnly
+              {duplicatesOnly
                 ? 'ПОДТВЕРЖДЁННЫЕ ДУБЛИ'
-                : 'КАРТОЧКИ ОБЪЯВЛЕНИЙ'}
+                : signalsOnly
+                  ? 'ОБЪЯВЛЕНИЯ С СИГНАЛАМИ'
+                  : 'КАРТОЧКИ ОБЪЯВЛЕНИЙ'}
             </span>
             <h2>
-              {filters.duplicatesOnly
+              {duplicatesOnly
                 ? `${filtered.length} ${filtered.length === 1 ? 'артикул' : 'артикулов'} с дублями`
                 : `Найдено ${filtered.length} из ${scoped.length}`}
             </h2>
@@ -785,7 +921,16 @@ export default function Insights({
               <GrowthCard
                 key={item.generationKey}
                 item={item}
-                duplicatesOnly={filters.duplicatesOnly}
+                duplicatesOnly={duplicatesOnly}
+                signals={
+                  signalsOnly
+                    ? item.signals.filter(
+                        (signal) =>
+                          filters.signalKinds === null ||
+                          filters.signalKinds.includes(signal.kind),
+                      )
+                    : []
+                }
                 demandPopulation={Object.values(demandByArticle)}
                 onOpenPart={onOpenPart}
                 onOpenPartMetrics={onOpenPartMetrics}
@@ -809,26 +954,26 @@ export default function Insights({
           <div className="insight-empty">
             <Layers3 />
             <h3>
-              {filters.duplicatesOnly
+              {duplicatesOnly
                 ? 'Подтверждённых дублей нет'
-                : 'Объявления не найдены'}
+                : signalsOnly
+                  ? 'Сигналы не найдены'
+                  : 'Объявления не найдены'}
             </h3>
             <p>
-              {filters.duplicatesOnly
+              {duplicatesOnly
                 ? 'Одна совместная выгрузка двух ID не считается дублем.'
-                : 'Измените категории или диапазоны. Объявления без строк в последней выгрузке сюда не попадают.'}
+                : signalsOnly
+                  ? 'Измените типы сигналов, категории, спрос или период. При короткой истории или недостаточном объёме данных вывод не формируется.'
+                  : 'Измените категории или диапазоны. Объявления без строк в последней выгрузке сюда не попадают.'}
             </p>
             <button
               type="button"
               onClick={
-                filters.duplicatesOnly
-                  ? () => update({ duplicatesOnly: false })
-                  : reset
+                duplicatesOnly ? () => update({ mode: 'selection' }) : reset
               }
             >
-              {filters.duplicatesOnly
-                ? 'Вернуться к отбору'
-                : 'Сбросить фильтры'}{' '}
+              {duplicatesOnly ? 'Вернуться к отбору' : 'Сбросить фильтры'}{' '}
               <ArrowRight />
             </button>
           </div>

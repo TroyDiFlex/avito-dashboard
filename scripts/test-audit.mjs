@@ -240,15 +240,58 @@ try {
     assert.ok(duplicateHtml.includes(`https://www.avito.ru/${id}`));
   }
   assert.ok(duplicateHtml.includes('24.08 и 31.08'));
-  assert.ok(duplicateHtml.includes('Вернуться к отбору'));
+  assert.ok(duplicateHtml.includes('Отбор'));
 
   window.location.search = '';
   assert.equal(
     renderToStaticMarkup(createElement(Insights, insightsProps)),
     extraHtml,
   );
+  window.location.search = '?growthMode=signals';
+  const signalAds = [
+    '2026-08-10',
+    '2026-08-17',
+    '2026-08-24',
+    '2026-08-31',
+  ].map((end) => ({
+    ...row('И31', end, 0),
+    id: '500',
+    name: 'Деталь BMW 11128507607',
+    category: 'Запчасти',
+    price: 1000,
+    profile: 'test',
+    metrics: { impressions: 5, views: 0, contacts: 0 },
+  }));
+  const signalProps = {
+    ...insightsProps,
+    snapshot: { ...snapshot, ads: signalAds },
+  };
+  const signalHtml = renderToStaticMarkup(createElement(Insights, signalProps));
+  assert.equal(
+    (signalHtml.match(/class="growth-range-field"/g) || []).length,
+    1,
+  );
+  assert.ok(signalHtml.includes('Пороги сигналов'));
+  assert.ok(signalHtml.includes('Все сигналы'));
+  assert.ok(signalHtml.includes('aria-label="Категории"'));
+  assert.ok(
+    signalHtml.includes('Сигналы не найдены'),
+    'Search/demand filters still apply in signals mode.',
+  );
+  localStorage.getItem = () =>
+    JSON.stringify({ ...saved, search: '', demand: { min: '', max: '' } });
+  const signalCardHtml = renderToStaticMarkup(
+    createElement(Insights, signalProps),
+  );
+  assert.ok(signalCardHtml.includes('Стабильно низкий охват'));
+  assert.ok(signalCardHtml.includes('4 из 4 выгрузок'));
+  assert.ok(signalCardHtml.includes('growth-signal-findings'));
+  assert.ok(signalCardHtml.includes('growth-funnel'));
+  assert.ok(signalCardHtml.includes('insights-scope-picker'));
+  assert.ok(!signalCardHtml.includes('Добавить показатель'));
+  assert.ok(!signalCardHtml.includes('Убрать дополнительный показатель'));
   console.log(
-    'Passed: three ranges in one grid, duplicate mode hides normal filters, ignores scope/dates and retains saved settings.',
+    'Passed: three modes, current cards, range layout, signal evidence/category/demand filters, independent duplicates and saved settings.',
   );
 } finally {
   delete globalThis.window;
