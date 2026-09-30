@@ -126,34 +126,131 @@ console.log(
   'Passed: one switchable overview table, five branches and all metrics render.',
 );
 
+const insightsProps = {
+  snapshot: demoSnapshot(),
+  from: '2026-03-23',
+  to: '2026-08-31',
+  availableBranches: branches,
+  initialBranch: 'network',
+  demandByArticle: { 11128507607: 66 },
+  categoryByArticle: { 11128507607: 'A' },
+  onOpenPart() {},
+  onOpenPartMetrics() {},
+  getPartHref() {
+    return '/?partsScope=network';
+  },
+  getPartMetricsHref(ad) {
+    return `/?partsScope=${encodeURIComponent(ad.branch)}`;
+  },
+};
 const insightsHtml = renderToStaticMarkup(
-  createElement(Insights, {
-    snapshot: demoSnapshot(),
-    from: '2026-03-23',
-    to: '2026-08-31',
-    availableBranches: branches,
-    initialBranch: 'network',
-    demandByArticle: { 11128507607: 66 },
-    categoryByArticle: { 11128507607: 'A' },
-    onOpenPart() {},
-    onOpenPartMetrics() {},
-    getPartHref() {
-      return '/?partsScope=network';
-    },
-    getPartMetricsHref(ad) {
-      return `/?partsScope=${encodeURIComponent(ad.branch)}`;
-    },
-  }),
+  createElement(Insights, insightsProps),
 );
 assert.ok(insightsHtml.includes('Точки роста'));
-assert.ok(insightsHtml.includes('Правила сигналов'));
-assert.ok(insightsHtml.includes('Требуют внимания'));
-assert.ok(insightsHtml.includes('Ждём данные'));
-assert.ok(insightsHtml.includes('Без сигналов'));
-assert.ok(insightsHtml.includes('Спрос'));
-assert.ok(insightsHtml.includes('Категория'));
-assert.ok(insightsHtml.includes('Показатели'));
-assert.ok(!insightsHtml.includes('NaN') && !insightsHtml.includes('Infinity'));
-console.log(
-  'Passed: transparent growth rules, filters and unique product cards render.',
+assert.ok(!insightsHtml.includes('Правила сигналов'));
+assert.ok(!insightsHtml.includes('Требуют внимания'));
+assert.ok(!insightsHtml.includes('Без сигналов'));
+assert.ok(insightsHtml.includes('Дубли'));
+assert.equal(
+  (insightsHtml.match(/class="growth-range-field"/g) || []).length,
+  2,
 );
+assert.equal(
+  (insightsHtml.match(/class="growth-slider-thumb"/g) || []).length,
+  4,
+);
+assert.ok(insightsHtml.includes('Спрос'));
+assert.ok(insightsHtml.includes('Категории'));
+assert.ok(insightsHtml.includes('Показатели'));
+const insightsContent = insightsHtml.replace(
+  /<script\b[^>]*>[\s\S]*?<\/script>/g,
+  '',
+);
+assert.ok(
+  !insightsContent.includes('NaN') && !insightsContent.includes('Infinity'),
+  insightsContent.match(/.{0,100}(?:NaN|Infinity).{0,100}/g)?.join('\n'),
+);
+console.log('Passed: range filters and current listing cards render.');
+
+// Read saved filters during server rendering; no browser or DOM is started.
+const saved = {
+  scope: 'И31',
+  categories: ['A'],
+  demand: { min: '50', max: '100' },
+  metric: { metric: 'views', min: '20', max: '40' },
+  extra: { metric: 'viewRate', min: '5', max: '10' },
+  search: 'no match',
+};
+globalThis.window = { location: { search: '' } };
+globalThis.localStorage = { getItem: () => JSON.stringify(saved) };
+try {
+  const extraHtml = renderToStaticMarkup(
+    createElement(Insights, insightsProps),
+  );
+  assert.equal(
+    (extraHtml.match(/class="growth-range-field"/g) || []).length,
+    3,
+  );
+  assert.equal(
+    (extraHtml.match(/class="growth-slider-thumb"/g) || []).length,
+    6,
+  );
+  assert.ok(extraHtml.includes('with-extra'));
+  assert.ok(extraHtml.includes('value="no match"'));
+  assert.ok(extraHtml.includes('insights-scope-picker'));
+
+  window.location.search = '?growthMode=duplicates';
+  const duplicateAds = ['И31', 'Х7'].flatMap((branch, branchIndex) =>
+    ['2026-08-24', '2026-08-31'].flatMap((end) =>
+      [0, 1].map((index) => ({
+        ...row(branch, end, 1),
+        id: String(100 + branchIndex * 10 + index),
+        name: 'Деталь BMW 11128507607',
+        category: 'Запчасти',
+        price: 1000,
+        profile: 'test',
+      })),
+    ),
+  );
+  const duplicateHtml = renderToStaticMarkup(
+    createElement(Insights, {
+      ...insightsProps,
+      snapshot: { ...snapshot, ads: duplicateAds },
+      from: '2026-01-01',
+      to: '2026-01-02',
+    }),
+  );
+  for (const hidden of [
+    'growth-range-field',
+    'growth-category-trigger',
+    'growth-search',
+    'insights-scope-picker',
+    'growth-funnel',
+    'growth-card-footer',
+  ])
+    assert.ok(
+      !duplicateHtml.includes(hidden),
+      `Hidden in duplicate mode: ${hidden}`,
+    );
+  assert.equal(
+    (duplicateHtml.match(/class="growth-card is-duplicate"/g) || []).length,
+    2,
+  );
+  for (const id of [100, 101, 110, 111]) {
+    assert.ok(duplicateHtml.includes(`https://www.avito.ru/${id}`));
+  }
+  assert.ok(duplicateHtml.includes('24.08 и 31.08'));
+  assert.ok(duplicateHtml.includes('Вернуться к отбору'));
+
+  window.location.search = '';
+  assert.equal(
+    renderToStaticMarkup(createElement(Insights, insightsProps)),
+    extraHtml,
+  );
+  console.log(
+    'Passed: three ranges in one grid, duplicate mode hides normal filters, ignores scope/dates and retains saved settings.',
+  );
+} finally {
+  delete globalThis.window;
+  delete globalThis.localStorage;
+}

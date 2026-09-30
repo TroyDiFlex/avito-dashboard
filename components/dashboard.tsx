@@ -260,6 +260,7 @@ export default function Dashboard() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [period, setPeriod] = useState<PeriodPreset>('6m');
+  const [growthDuplicatesMode, setGrowthDuplicatesMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [scriptUrl, setScriptUrl] = useState('');
@@ -800,7 +801,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {snapshot && from && to && (
+        {snapshot && from && to && !(tab === 'insights' && growthDuplicatesMode) && (
           <section className="controlbar">
             <PeriodPicker
               key={`${from}:${to}:${bounds.min}:${bounds.max}`}
@@ -883,6 +884,7 @@ export default function Dashboard() {
               )}
               {tab === 'insights' && (
                 <Insights
+                  onDuplicateModeChange={setGrowthDuplicatesMode}
                   snapshot={snapshot}
                   from={from}
                   to={to}
