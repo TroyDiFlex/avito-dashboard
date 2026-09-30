@@ -960,7 +960,7 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.8fr) minmax(
       210px,
       0.8fr
-    ) minmax(190px, 1fr) minmax(170px, 0.9fr) auto;
+    ) minmax(190px, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 10px;
@@ -1187,6 +1187,48 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   justify-content: space-between;
   gap: 14px;
 }
+.growth-title-details {
+  min-width: 0;
+}
+.growth-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.growth-title h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.growth-copy-title {
+  width: 26px;
+  height: 26px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  color: #888891;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+.growth-copy-title:hover,
+.growth-copy-title:focus-visible {
+  color: #eeeef0;
+  background: #24242a;
+  border-color: #44444c;
+}
+.growth-copy-title.copied {
+  color: #62dc8e;
+}
+.growth-copy-title svg {
+  width: 14px;
+  height: 14px;
+}
+.growth-copy-error {
+  align-self: center;
+  color: #ff8c93;
+  font-size: 10px;
+}
 .growth-title-row h3 {
   color: #f3f3f5;
   font-size: 18px;
@@ -1239,42 +1281,25 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   height: 11px;
 }
 .growth-funnel {
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) auto minmax(100px, 1fr) auto minmax(
-      100px,
-      1fr
-    ) minmax(160px, 1.2fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  margin-left: 3px;
-  background: #0d0d10;
-  border-top: 1px solid #222228;
-  border-bottom: 1px solid #222228;
+  gap: 6px 18px;
+  padding: 0 14px 10px 16px;
 }
 .growth-funnel > span {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  padding: 10px 13px;
-}
-.growth-funnel > span + span,
-.growth-funnel .growth-window {
-  border-left: 1px solid #222228;
-}
-.growth-funnel > svg {
-  width: 13px;
-  height: 13px;
-  color: #505059;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
 }
 .growth-funnel small {
-  color: #676771;
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: #83838c;
+  font-size: 11px;
 }
 .growth-funnel strong {
   color: #e1e1e5;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
 }
 .growth-funnel .growth-window strong {
@@ -1310,8 +1335,8 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   color: #62dc8e;
 }
 .growth-card-footer {
-  min-height: 50px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 18px;
   padding: 8px 12px 8px 16px;
@@ -1324,22 +1349,6 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .growth-card-footer > span b {
   color: #bdbdc4;
   font-weight: 600;
-}
-.growth-decision {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-.growth-decision > span {
-  color: #777780;
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.growth-card-footer .picker {
-  min-width: 180px;
 }
 
 .settings-dialog, .issues-dialog { background: #131316 !important; border-color: #303037 !important; }
@@ -1547,28 +1556,7 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
   .growth-card-actions {
     justify-content: flex-start;
   }
-  .growth-funnel {
-    grid-template-columns: 1fr;
-  }
-  .growth-funnel > svg {
-    display: none;
-  }
-  .growth-funnel > span + span,
-  .growth-funnel .growth-window {
-    border-top: 1px solid #222228;
-    border-left: 0;
-  }
   .growth-card-footer {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 7px;
-  }
-  .growth-decision {
-    align-items: stretch;
-    flex-direction: column;
-    margin-left: 0;
-  }
-  .growth-card-footer .picker {
-    width: 100%;
+    gap: 7px 18px;
   }
 }

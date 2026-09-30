@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
+  Check,
   ChevronDown,
+  Copy,
   ExternalLink,
   Eye,
   Layers3,
@@ -32,13 +34,10 @@ import {
 import { format, shortDate, type AdRow, type Snapshot } from '@/lib/model';
 
 type ViewFilter = GrowthCaseState | 'all';
-type Decision = 'unreviewed' | 'high' | 'watch' | 'ok' | 'recreated';
-type DecisionFilter = Decision | 'all';
 
 const PAGE_SIZE = 60;
 const FILTERS_KEY = 'pik-growth-filters';
 const RULES_KEY = 'pik-growth-rules';
-const DECISIONS_KEY = 'pik-growth-decisions';
 
 const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'signal', label: 'Требуют внимания' },
@@ -47,30 +46,12 @@ const VIEW_FILTERS: { value: ViewFilter; label: string }[] = [
   { value: 'all', label: 'Все товары' },
 ];
 
-const DECISION_CHOICES: { value: Decision; label: string }[] = [
-  { value: 'unreviewed', label: 'Не разобрано' },
-  { value: 'high', label: 'Высокий приоритет' },
-  { value: 'watch', label: 'Наблюдать' },
-  { value: 'ok', label: 'Всё в порядке' },
-  { value: 'recreated', label: 'Пересоздано' },
-];
-
 function storedRules(): GrowthRules {
   const saved = readBrowserPreference(RULES_KEY);
   return normalizeGrowthRules({
     ...DEFAULT_GROWTH_RULES,
     ...(saved && typeof saved === 'object' ? saved : {}),
   } as GrowthRules);
-}
-
-function storedDecisions(): Record<string, Decision> {
-  const saved = readBrowserPreference(DECISIONS_KEY);
-  if (!saved || typeof saved !== 'object') return {};
-  return Object.fromEntries(
-    Object.entries(saved).filter((entry): entry is [string, Decision] =>
-      DECISION_CHOICES.some((choice) => choice.value === entry[1]),
-    ),
-  );
 }
 
 function initialFilters(initialBranch: string, availableBranches: string[]) {
@@ -87,7 +68,6 @@ function initialFilters(initialBranch: string, availableBranches: string[]) {
     availableBranches.includes(initialBranch) ? initialBranch : 'network',
   );
   const viewCandidate = value('growthView', 'signal');
-  const decisionCandidate = value('growthDecision', 'all');
   return {
     scope:
       scopeCandidate === 'network' || availableBranches.includes(scopeCandidate)
@@ -100,10 +80,6 @@ function initialFilters(initialBranch: string, availableBranches: string[]) {
     demandMin: value('growthDemandMin'),
     demandMax: value('growthDemandMax'),
     signal: value('growthSignal', 'all') as 'all' | GrowthSignalKind,
-    decision: (decisionCandidate === 'all' ||
-    DECISION_CHOICES.some((item) => item.value === decisionCandidate)
-      ? decisionCandidate
-      : 'all') as DecisionFilter,
     search: value('growthSearch'),
     visibleCount: PAGE_SIZE,
   };
@@ -135,25 +111,39 @@ function caseIcon(item: GrowthCase) {
 
 function GrowthCard({
   item,
-  decision,
   rules,
   demandPopulation,
-  onDecisionChange,
   onOpenPart,
   onOpenPartMetrics,
   getPartHref,
   getPartMetricsHref,
 }: {
   item: GrowthCase;
-  decision: Decision;
   rules: GrowthRules;
   demandPopulation: Array<number | null>;
-  onDecisionChange: (decision: Decision) => void;
   onOpenPart: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   onOpenPartMetrics: (ad: Pick<AdRow, 'branch' | 'id'>) => void;
   getPartHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
   getPartMetricsHref: (ad: Pick<AdRow, 'branch' | 'id'>) => string;
 }) {
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>(
+    'idle',
+  );
+  useEffect(() => {
+    if (copyStatus === 'idle') return;
+    const timeout = window.setTimeout(() => setCopyStatus('idle'), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [copyStatus]);
+  const copyTitle = async () => {
+    try {
+      await navigator.clipboard.writeText(item.name);
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('error');
+    }
+  };
+  const copyLabel =
+    copyStatus === 'copied' ? 'Название скопировано' : 'Скопировать название';
   const ad = { branch: item.branch, id: item.primaryId };
   const url = avitoUrl(item.primaryId);
   const demandTone = demandLevel(item.demand, demandPopulation);
@@ -180,18 +170,40 @@ function GrowthCard({
             )}
           </div>
           <div className="growth-title-row">
-            <div>
-              <h3>
-                <a
-                  href={getPartHref(ad)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onOpenPart(ad);
-                  }}
+            <div className="growth-title-details">
+              <div className="growth-title">
+                <h3>
+                  <a
+                    href={getPartHref(ad)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onOpenPart(ad);
+                    }}
+                  >
+                    {item.name}
+                  </a>
+                </h3>
+                <button
+                  type="button"
+                  className={`growth-copy-title ${copyStatus}`}
+                  aria-label={copyLabel}
+                  title={copyLabel}
+                  onClick={copyTitle}
                 >
-                  {item.name}
-                </a>
-              </h3>
+                  {copyStatus === 'copied' ? <Check /> : <Copy />}
+                </button>
+                <output
+                  className={
+                    copyStatus === 'error' ? 'growth-copy-error' : 'sr-only'
+                  }
+                >
+                  {copyStatus === 'copied'
+                    ? 'Название скопировано'
+                    : copyStatus === 'error'
+                      ? 'Не удалось скопировать название'
+                      : ''}
+                </output>
+              </div>
               <p>
                 Текущее: {item.currentIds.map((id) => `№ ${id}`).join(', ')}
                 {item.previousIds.length > 0 &&
@@ -223,12 +235,10 @@ function GrowthCard({
           <small>Показы</small>
           <strong>{format(item.impressions, 'impressions')}</strong>
         </span>
-        <ArrowRight />
         <span>
           <small>Просмотры</small>
           <strong>{format(item.views, 'views')}</strong>
         </span>
-        <ArrowRight />
         <span>
           <small>Контакты</small>
           <strong>{format(item.contacts, 'contacts')}</strong>
@@ -278,16 +288,6 @@ function GrowthCard({
         <span>
           Последняя: <b>{shortDate(item.lastSeen)}</b>
         </span>
-        <div className="growth-decision">
-          <span>Моё решение</span>
-          <Picker
-            label="Моё решение"
-            value={decision}
-            onChange={(value) => onDecisionChange(value as Decision)}
-            items={DECISION_CHOICES}
-            contentAlign="end"
-          />
-        </div>
       </footer>
     </article>
   );
@@ -361,11 +361,9 @@ export default function Insights({
   const [signal, setSignal] = useState<'all' | GrowthSignalKind>(
     initial.signal,
   );
-  const [decision, setDecision] = useState<DecisionFilter>(initial.decision);
   const [search, setSearch] = useState(initial.search);
   const [visibleCount, setVisibleCount] = useState(initial.visibleCount);
   const [rules, setRules] = useState(storedRules);
-  const [decisions, setDecisions] = useState(storedDecisions);
 
   const effectiveScope =
     scope === 'network' || availableBranches.includes(scope)
@@ -396,9 +394,6 @@ export default function Insights({
     saveBrowserPreference(RULES_KEY, { ...rules });
   }, [rules]);
   useEffect(() => {
-    saveBrowserPreference(DECISIONS_KEY, decisions);
-  }, [decisions]);
-  useEffect(() => {
     const filters = {
       scope: effectiveScope,
       view,
@@ -406,7 +401,6 @@ export default function Insights({
       demandMin,
       demandMax,
       signal,
-      decision,
       search,
     };
     saveBrowserPreference(FILTERS_KEY, filters);
@@ -417,19 +411,10 @@ export default function Insights({
       growthDemandMin: demandMin,
       growthDemandMax: demandMax,
       growthSignal: signal,
-      growthDecision: decision,
+      growthDecision: null,
       growthSearch: search,
     });
-  }, [
-    category,
-    decision,
-    demandMax,
-    demandMin,
-    effectiveScope,
-    search,
-    signal,
-    view,
-  ]);
+  }, [category, demandMax, demandMin, effectiveScope, search, signal, view]);
 
   const scoped = cases.filter(
     (item) => effectiveScope === 'network' || item.branch === effectiveScope,
@@ -451,7 +436,6 @@ export default function Insights({
   const maximumDemand = parseBound(demandMax);
   const normalizedSearch = search.trim().toLocaleLowerCase('ru');
   const commonFiltered = scoped.filter((item) => {
-    const itemDecision = decisions[item.generationKey] ?? 'unreviewed';
     if (
       category !== 'all' &&
       (category === 'none' ? item.category != null : item.category !== category)
@@ -467,7 +451,6 @@ export default function Insights({
       (item.demand == null || item.demand > maximumDemand)
     )
       return false;
-    if (decision !== 'all' && itemDecision !== decision) return false;
     if (
       signal !== 'all' &&
       !item.signals.some((itemSignal) => itemSignal.kind === signal)
@@ -526,10 +509,6 @@ export default function Insights({
       label,
     })),
   ];
-  const decisionChoices = [
-    { value: 'all', label: 'Любое решение' },
-    ...DECISION_CHOICES,
-  ];
   const updateRule = (key: keyof GrowthRules, value: number) =>
     setRules((current) => normalizeGrowthRules({ ...current, [key]: value }));
   const resetFilters = () => {
@@ -537,7 +516,6 @@ export default function Insights({
     setDemandMin('');
     setDemandMax('');
     setSignal('all');
-    setDecision('all');
     setSearch('');
     setVisibleCount(PAGE_SIZE);
   };
@@ -552,8 +530,8 @@ export default function Insights({
           <h2>Точки роста</h2>
           <p>
             Один артикул в подразделении — одна карточка. Спрос — рыночные
-            запросы; категория — вклад товара в годовой финансовый результат. Это два
-            независимых фильтра.
+            запросы; категория — вклад товара в годовой финансовый результат.
+            Это два независимых фильтра.
           </p>
         </div>
         <div className="insights-scope-picker">
@@ -710,16 +688,6 @@ export default function Insights({
           items={signalChoices}
           contentAlign="end"
         />
-        <Picker
-          label="Моё решение"
-          value={decision}
-          onChange={(value) => {
-            setDecision(value as DecisionFilter);
-            setVisibleCount(PAGE_SIZE);
-          }}
-          items={decisionChoices}
-          contentAlign="end"
-        />
         <button type="button" className="growth-reset" onClick={resetFilters}>
           Сбросить
         </button>
@@ -755,15 +723,8 @@ export default function Insights({
               <GrowthCard
                 key={item.generationKey}
                 item={item}
-                decision={decisions[item.generationKey] ?? 'unreviewed'}
                 rules={rules}
                 demandPopulation={Object.values(demandByArticle)}
-                onDecisionChange={(next) =>
-                  setDecisions((current) => ({
-                    ...current,
-                    [item.generationKey]: next,
-                  }))
-                }
                 onOpenPart={onOpenPart}
                 onOpenPartMetrics={onOpenPartMetrics}
                 getPartHref={getPartHref}
