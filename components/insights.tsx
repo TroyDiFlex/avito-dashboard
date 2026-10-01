@@ -308,6 +308,57 @@ function SignalSettings({
   );
 }
 
+function CopyTitlesButton({ items }: { items: GrowthCase[] }) {
+  const text = items
+    .map((item) => item.name.replace(/[\t\r\n\u2028\u2029]+/g, ' ').trim())
+    .join('\n');
+  const [result, setResult] = useState<{
+    text: string;
+    status: 'copied' | 'error';
+  } | null>(null);
+  const status = result?.text === text ? result.status : 'idle';
+  useEffect(() => {
+    if (!result) return;
+    const timeout = window.setTimeout(() => setResult(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [result]);
+  const copyTitles = async () => {
+    if (!items.length) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setResult({ text, status: 'copied' });
+    } catch {
+      setResult({ text, status: 'error' });
+    }
+  };
+  return (
+    <div className="growth-copy-actions">
+      <button
+        type="button"
+        className={`growth-copy-titles ${status}`}
+        disabled={!items.length}
+        title="Все найденные объявления, по одному названию на строку"
+        onClick={copyTitles}
+      >
+        {status === 'copied' ? <Check /> : <Copy />}
+        {status === 'copied'
+          ? `Скопировано: ${items.length}`
+          : 'Скопировать названия'}
+      </button>
+      <output
+        className={status === 'error' ? 'growth-copy-error' : 'sr-only'}
+        aria-live="polite"
+      >
+        {status === 'copied'
+          ? `Скопировано названий: ${items.length}`
+          : status === 'error'
+            ? 'Не удалось скопировать названия. Попробуйте ещё раз.'
+            : ''}
+      </output>
+    </div>
+  );
+}
+
 function GrowthCard({
   item,
   duplicatesOnly,
@@ -900,7 +951,7 @@ export default function Insights({
       )}
       <section className="insight-list-panel panel growth-list-panel">
         <div className="insight-list-toolbar growth-list-toolbar">
-          <div>
+          <div className="growth-list-summary">
             <span className="eyebrow">
               {duplicatesOnly
                 ? 'ПОДТВЕРЖДЁННЫЕ ДУБЛИ'
@@ -914,6 +965,7 @@ export default function Insights({
                 : `Найдено ${filtered.length} из ${scoped.length}`}
             </h2>
           </div>
+          <CopyTitlesButton items={filtered} />
         </div>
         {displayed.length ? (
           <div className="insight-list growth-list">

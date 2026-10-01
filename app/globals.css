@@ -890,6 +890,13 @@ button:not(:disabled):active, [data-slot="button"]:not(:disabled):active { trans
 .growth-list-toolbar > div:last-child {
   min-width: 0;
 }
+.growth-list-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.growth-copy-actions { flex-wrap: wrap; }
+.growth-copy-titles { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 11px; color: #bcbcc5; background: #17171b; border: 1px solid #2e2e35; border-radius: 8px; font-size: 11px; white-space: nowrap; }
+.growth-copy-titles:hover:not(:disabled), .growth-copy-titles:focus-visible { color: #fff; border-color: #484851; }
+.growth-copy-titles.copied { color: #62dc8e; }
+.growth-copy-titles:disabled { opacity: .4; cursor: not-allowed; }
+.growth-copy-titles svg { width: 14px; height: 14px; flex: none; }
 .growth-card {
   position: relative;
   overflow: hidden;
