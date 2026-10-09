@@ -21,13 +21,15 @@ export interface RawPayload {
 const aliases: Record<string, string> = {
   боровая: 'Б116',
   б116: 'Б116',
+  автов: 'Автово',
   автово: 'Автово',
   ворошилова: 'Ворошилова',
   к20: 'К20',
   и31: 'И31',
   х7: 'Х7',
 };
-const branch = (v: unknown) => aliases[text(v).trim().toLowerCase()] ?? null;
+const branch = (v: unknown) =>
+  aliases[text(v).split('\\', 1)[0].trim().toLowerCase()] ?? null;
 const clean = (v: unknown) => text(v).trim().replace(/\s+/g, ' ').toLowerCase();
 export function date(v: unknown): string | null {
   if (typeof v === 'number' && v > 30000 && v < 80000)
@@ -252,9 +254,24 @@ export function normalize(
   for (const book of payload.books) {
     const sh = book.sheets.find((s) => clean(s.name) === 'статистика')!;
     const source = `${book.name} / ${sh.name}`;
+    const headerRows = new Set(
+      sh.rows.flatMap((r, ri) =>
+        branch(r[0]) || r.slice(1).some((v) => parsePeriod(text(v))) ? [ri] : [],
+      ),
+    );
     for (let ri = 0; ri < sh.rows.length; ri++) {
+      if (!headerRows.has(ri)) continue;
       const br = branch(sh.rows[ri]?.[0]);
-      if (!br) continue;
+      if (!br) {
+        issues.push({
+          severity: 'error',
+          code: 'unknown-stat-branch',
+          source,
+          row: ri + 1,
+          message: `Не распознано подразделение в заголовке статистики: «${text(sh.rows[ri]?.[0])}». Проверьте название.`,
+        });
+        continue;
+      }
       const header = sh.rows[ri];
       const periods = header
         .map((v, ci) => ({ ci, label: text(v), p: parsePeriod(text(v)) }))
@@ -310,7 +327,7 @@ export function normalize(
         const metrics: Metrics = {};
         for (
           let j = ri + 1;
-          j < sh.rows.length && !branch(sh.rows[j]?.[0]);
+          j < sh.rows.length && !headerRows.has(j);
           j++
         ) {
           const m = metricNames[clean(sh.rows[j]?.[0])];

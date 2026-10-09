@@ -27,7 +27,7 @@ const {
   shiftDate,
   restorePeriod,
 } = await import('../private/compiled/model.js');
-const { parseAd } = await import('../private/compiled/normalize.js');
+const { normalize, parseAd } = await import('../private/compiled/normalize.js');
 const { describeIssue, filterIssues, isBlockingIssue } = await import('../private/compiled/issues.js');
 const {
   distribution,
@@ -114,6 +114,102 @@ for (const shifted of [false, true])
     assert.equal(result.ad.metrics.contacts, 2);
     assert.equal(result.ad.metrics.spend, 100);
   }
+
+const legacyBranches = ['И31', 'Х7', 'Автово', 'Б116', 'Ворошилова'];
+const renamedBranches = [
+  'И31',
+  'Х7',
+  'Автов\\АЦП СПб 4',
+  'Б116\\АЦП СПб 2',
+  'Ворошилова\\АЦП СПб В20АЕ',
+];
+function twoBookPayload(statBranches, detailBranches = legacyBranches) {
+  return {
+    exportedAt: '2026-10-09T00:00:00.000Z',
+    books: [[0, 1], [2, 3, 4]].map((indices, bookIndex) => ({
+      name: bookIndex === 0 ? 'Статистика И31' : 'Статистика К20',
+      sheets: [
+        {
+          name: 'Статистика',
+          rows: indices.flatMap((index) => [
+            [statBranches[index], '18.08-24.08', '25.08-31.08'],
+            ['Показы', 100 + index, 200 + index],
+            ['Просмотры', 20 + index, 40 + index],
+            ['Контакты', 2 + index, 4 + index],
+            ['Расходы', 100 + index, 200 + index],
+          ]),
+        },
+        {
+          name: 'Детализация',
+          rows: [
+            ['Дата', 'Аккаунт'],
+            ...indices.flatMap((index) =>
+              ['2026-08-24', '2026-08-31'].map((end) => {
+                const detail = row(false, false);
+                detail[0] = end;
+                detail[1] = detailBranches[index];
+                detail[2] = 1234567890 + index;
+                return detail;
+              }),
+            ),
+          ],
+        },
+      ],
+    })),
+  };
+}
+const legacySnapshot = normalize(twoBookPayload(legacyBranches));
+assert.equal(legacySnapshot.stats.length, 10);
+assert.equal(legacySnapshot.ads.length, 10);
+for (const statBranches of [renamedBranches, legacyBranches])
+  for (const detailBranches of [legacyBranches, renamedBranches]) {
+    const snapshot = normalize(twoBookPayload(statBranches, detailBranches));
+    assert.equal(
+      snapshot.stats.length,
+      legacySnapshot.stats.length,
+      'Renamed statistics headers must retain all 10 reports from both books.',
+    );
+    assert.equal(snapshot.ads.length, legacySnapshot.ads.length);
+    assert.deepEqual(
+      snapshot,
+      legacySnapshot,
+      'Renamed warehouse headers must preserve both source books and all metrics.',
+    );
+  }
+for (let index = 2; index < renamedBranches.length; index++) {
+  const detail = row(false, false);
+  detail.splice(1, 1);
+  assert.equal(
+    parseAd(detail, false, 'synthetic', 2, `Детализация ${renamedBranches[index]}`)
+      .ad?.branch,
+    legacyBranches[index],
+  );
+}
+const spacedSnapshot = normalize(
+  twoBookPayload(
+    renamedBranches.map((name) => ` ${name.toUpperCase().replace('\\', ' \\ ')} `),
+  ),
+);
+assert.deepEqual(spacedSnapshot, legacySnapshot);
+const unknownPayload = twoBookPayload(renamedBranches);
+unknownPayload.books[1].sheets[0].rows[10][0] = 'Новый склад\\АЦП СПб 9';
+const unknownSnapshot = normalize(unknownPayload);
+assert.deepEqual(
+  unknownSnapshot.stats,
+  legacySnapshot.stats.filter((stat) => stat.branch !== 'Ворошилова'),
+  'Unknown warehouse blocks must not overwrite the previous warehouse metrics.',
+);
+const unknownHeaderIssue = unknownSnapshot.issues.find(
+  (issue) => issue.code === 'unknown-stat-branch',
+);
+assert.ok(unknownHeaderIssue);
+assert.equal(unknownHeaderIssue.source, 'Статистика К20 / Статистика');
+assert.equal(unknownHeaderIssue.row, 11);
+assert.equal(isBlockingIssue(unknownHeaderIssue), true);
+console.log(
+  'Passed: legacy and renamed warehouse headers, both source books and unknown block protection.',
+);
+
 const bad = row(false, false);
 bad[21] = 2990;
 const result = parseAd(bad, true, 'synthetic', 2, 'Детализация');
