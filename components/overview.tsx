@@ -35,7 +35,7 @@ const GROUPS: { title: string; metrics: Metric[] }[] = [
   },
   {
     title: 'Объявления и склад',
-    metrics: ['active', 'unpublished', 'archived', 'stock'],
+    metrics: ['active', 'unpublished', 'archived', 'totalAds', 'stock'],
   },
 ];
 const ALL_METRICS = GROUPS.flatMap((group) => group.metrics);

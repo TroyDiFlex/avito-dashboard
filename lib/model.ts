@@ -21,6 +21,7 @@ export type Metric =
   | 'active'
   | 'unpublished'
   | 'archived'
+  | 'totalAds'
   | 'stock';
 export type Metrics = Partial<Record<Metric, number | null>>;
 export interface StatRow {
@@ -245,6 +246,13 @@ export const METRICS: Record<
     good: 'neutral',
     group: 'Объявления и склад',
   },
+  totalAds: {
+    label: 'Всего',
+    unit: 'count',
+    kind: 'last',
+    good: 'neutral',
+    group: 'Объявления и склад',
+  },
   stock: {
     label: 'Склад',
     unit: 'money',
@@ -306,6 +314,15 @@ export function sum(rows: Metrics[], key: Metric): number | null {
   if (!rows.length || rows.some((r) => r[key] == null)) return null;
   return rows.reduce((total, r) => total + (r[key] as number), 0);
 }
+export function metricValue(metrics: Metrics, metric: Metric): number | null {
+  if (metric === 'totalAds') {
+    const { active, unpublished, archived } = metrics;
+    return active == null || unpublished == null || archived == null
+      ? null
+      : active + unpublished + archived;
+  }
+  return metrics[metric] ?? null;
+}
 export function aggregate(
   rows: { metrics: Metrics }[],
   metric: Metric,
@@ -323,7 +340,7 @@ export function aggregate(
     return ratio(sum(ms, a), sum(ms, b));
   }
   return METRICS[metric].kind === 'last'
-    ? (rows.at(-1)!.metrics[metric] ?? null)
+    ? metricValue(rows.at(-1)!.metrics, metric)
     : sum(ms, metric);
 }
 const numberFormats = new Map<string, Intl.NumberFormat>();

@@ -1,6 +1,7 @@
 import {
   aggregate,
   calendar,
+  metricValue,
   validRange,
   METRICS,
   type AdRow,
@@ -91,10 +92,10 @@ export function scopeHistory(rows: StatRow[], scope: string): StatRow[] {
         continue;
       }
       if (branches.length === 1)
-        metrics[metric] = sameDate[0].metrics[metric] ?? null;
+        metrics[metric] = metricValue(sameDate[0].metrics, metric);
       else if (metric === 'roi') metrics[metric] = null;
       else if (METRICS[metric].kind === 'last') {
-        const values = sameDate.map((s) => s.metrics[metric]);
+        const values = sameDate.map((s) => metricValue(s.metrics, metric));
         metrics[metric] = values.some((v) => v == null)
           ? null
           : values.reduce<number>((n, v) => n + v!, 0) /
