@@ -17,12 +17,14 @@ export type GrowthMetric =
   | 'impressions'
   | 'views'
   | 'contacts'
+  | 'spend'
   | 'viewRate'
   | 'contactRate';
 export const GROWTH_METRICS: { value: GrowthMetric; label: string }[] = [
   { value: 'impressions', label: 'Показы' },
   { value: 'views', label: 'Просмотры' },
   { value: 'contacts', label: 'Контакты' },
+  { value: 'spend', label: 'Расходы, ₽' },
   { value: 'viewRate', label: 'Показы → просмотры, %' },
   { value: 'contactRate', label: 'Просмотры → контакты, %' },
 ];
@@ -163,6 +165,7 @@ export interface GrowthListing {
   impressions: number | null;
   views: number | null;
   contacts: number | null;
+  spend: number | null;
   viewRate: number | null;
   contactRate: number | null;
   latestImpressions: number | null;
@@ -269,6 +272,7 @@ export function buildGrowthCases(
         impressions: aggregate(selected, 'impressions'),
         views: aggregate(selected, 'views'),
         contacts: aggregate(selected, 'contacts'),
+        spend: aggregate(selected, 'spend'),
         viewRate: aggregate(selected, 'viewRate'),
         contactRate: aggregate(selected, 'contactRate'),
         latestImpressions: latest.metrics.impressions ?? null,

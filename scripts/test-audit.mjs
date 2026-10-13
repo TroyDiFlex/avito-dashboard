@@ -199,6 +199,34 @@ try {
   assert.ok(extraHtml.includes('value="no match"'));
   assert.ok(extraHtml.includes('insights-scope-picker'));
 
+  window.location.search =
+    '?growthMetric=spend&growthMetricMin=30,75&growthMetricMax=30.75&growthExtraMetric=spend&growthExtraMin=0&growthExtraMax=30.75&growthSearch=';
+  const spendAds = ['2026-08-24', '2026-08-31'].map((end, index) => ({
+    ...row('И31', end, 1),
+    id: '700',
+    name: 'Деталь BMW 11128507607',
+    category: 'Запчасти',
+    price: 1000,
+    profile: 'test',
+    metrics: { ...row('И31', end, 1).metrics, spend: [10.25, 20.5][index] },
+  }));
+  const spendHtml = renderToStaticMarkup(
+    createElement(Insights, {
+      ...insightsProps,
+      snapshot: { ...snapshot, ads: spendAds },
+    }),
+  );
+  assert.equal((spendHtml.match(/Расходы, ₽/g) || []).length, 2);
+  assert.equal((spendHtml.match(/inputMode="decimal"/g) || []).length, 4);
+  assert.ok(spendHtml.includes('aria-valuetext="30,75 ₽"'));
+  assert.ok(
+    spendHtml.includes('<small>Расходы</small><strong>30,8 ₽</strong>'),
+  );
+  assert.equal((spendHtml.match(/class="growth-card /g) || []).length, 1);
+  console.log(
+    'Passed: spend selectors, decimal ranges, ruble labels and filtered spend cards render.',
+  );
+
   window.location.search = '?growthMode=duplicates';
   const duplicateAds = ['И31', 'Х7'].flatMap((branch, branchIndex) =>
     ['2026-08-24', '2026-08-31'].flatMap((end) =>

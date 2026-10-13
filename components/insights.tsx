@@ -87,7 +87,9 @@ function RangeField({
   onRemove?: () => void;
 }) {
   const id = useId();
-  const step = percentage ? 0.01 : 1;
+  const money = metric === 'spend';
+  const fractional = percentage || money;
+  const step = fractional ? 0.01 : 1;
   const min = Math.min(parseGrowthBound(range.min) ?? 0, ceiling);
   const max = Math.max(
     min,
@@ -155,7 +157,9 @@ function RangeField({
                     : 1,
               }}
               getAriaLabel={(thumb) => `${label}: ${thumb === 0 ? 'от' : 'до'}`}
-              getAriaValueText={(text) => `${text}${percentage ? '%' : ''}`}
+              getAriaValueText={(text) =>
+                `${text}${percentage ? '%' : money ? ' ₽' : ''}`
+              }
             />
           ))}
         </Slider.Control>
@@ -167,7 +171,7 @@ function RangeField({
             <input
               id={`${id}-${bound}`}
               type="text"
-              inputMode={percentage ? 'decimal' : 'numeric'}
+              inputMode={fractional ? 'decimal' : 'numeric'}
               value={range[bound]}
               placeholder={bound === 'min' ? '0' : number(ceiling)}
               aria-label={`${label}: ${bound === 'min' ? 'от' : 'до'}`}
@@ -519,6 +523,10 @@ function GrowthCard({
           <span>
             <small>Контакты</small>
             <strong>{format(item.contacts, 'contacts')}</strong>
+          </span>
+          <span>
+            <small>Расходы</small>
+            <strong>{format(item.spend, 'spend')}</strong>
           </span>
           <span>
             <small>Показы → просмотры</small>

@@ -29,6 +29,7 @@ const {
   parseGrowthBound,
   invalidGrowthRange,
   clampGrowthRange,
+  GROWTH_METRICS,
   NO_GROWTH_CATEGORY,
 } = await import('../private/compiled/growth.js');
 function ad({
@@ -37,6 +38,7 @@ function ad({
   impressions = 100,
   views = 10,
   contacts = 1,
+  spend = 12.5,
   branch = 'И31',
   article = '11121432928',
 }) {
@@ -47,7 +49,7 @@ function ad({
     name: article ? `Деталь BMW ${article}` : 'Без артикула',
     category: 'Запчасти',
     price: 10000,
-    metrics: { impressions, views, contacts },
+    metrics: { impressions, views, contacts, spend },
     source: 'test',
     row: 1,
     profile: 'test',
@@ -98,7 +100,13 @@ assert.equal(
   'The full selected history must not be truncated to six reports.',
 );
 assert.equal(full[0].views, 5000);
+assert.ok(GROWTH_METRICS.some((item) => item.value === 'spend'));
+assert.equal(full[0].spend, 125);
 const recent = cases(history, { from: '2026-03-09', to: '2026-03-09' });
+assert.equal(recent[0].spend, 12.5);
+assert.equal(growthMetricValue(recent[0], 'spend'), 12.5);
+assert.equal(growthRangeMaximum(full, 'spend'), 125);
+assert.equal(growthRangeMaximum(recent, 'spend'), 12.5);
 assert.equal(growthRangeMaximum(full, 'views'), 5000);
 assert.equal(
   growthRangeMaximum(recent, 'views'),
@@ -128,6 +136,11 @@ assert.equal(
   'Old ID metrics must not leak into its replacement.',
 );
 assert.equal(recreated[0].isDuplicate, false);
+assert.equal(
+  recreated[0].spend,
+  12.5,
+  'Old ID spend must not leak into its replacement.',
+);
 const past = cases([...history, ad({ id: '200', end: '2026-03-16' })], {
   from: weeks[0],
   to: weeks.at(-1),
@@ -142,6 +155,7 @@ assert.equal(
   null,
   'No observations in a period are not zero.',
 );
+assert.equal(past[0].spend, null);
 const removed = cases([
   ad({ id: '100', end: '2026-01-05' }),
   ad({ id: '900', end: '2026-01-12', article: '22221432928' }),
@@ -158,6 +172,12 @@ const pair = ['2026-03-09', '2026-03-16'].flatMap((end) => [
   ad({ id: '301', end }),
 ]);
 const duplicate = cases(pair);
+assert.equal(
+  duplicate[0].spend,
+  25,
+  'Spend belongs to the primary ID, not all duplicates.',
+);
+assert.ok(duplicate[0].listings.every((listing) => listing.spend === 25));
 assert.equal(duplicate[0].isDuplicate, true);
 assert.deepEqual(duplicate[0].duplicateIds, ['300', '301']);
 assert.deepEqual(duplicate[0].duplicateDates, ['2026-03-09', '2026-03-16']);
@@ -288,6 +308,53 @@ assert.equal(
   0,
   'Unknown data must not match a zero filter.',
 );
+const spendCases = cases([
+  ad({ id: '100', end: '2026-03-09', spend: 10.25 }),
+  ad({ id: '100', end: '2026-03-16', spend: 20.5 }),
+  ad({ id: '200', end: '2026-03-16', article: '22221432928', spend: 0 }),
+  ad({ id: '300', end: '2026-03-09', article: '33321432928', spend: 5 }),
+  ad({ id: '300', end: '2026-03-16', article: '33321432928', spend: null }),
+]);
+assert.equal(spendCases.find((item) => item.id === '100').spend, 30.75);
+assert.equal(spendCases.find((item) => item.id === '300').spend, null);
+for (const key of ['metric', 'extra']) {
+  const spendFilters = {
+    ...defaultGrowthFilters(),
+    [key]: { metric: 'spend', min: '30,75', max: '30.75' },
+  };
+  assert.deepEqual(
+    filterGrowthCases(spendCases, spendFilters).map((item) => item.id),
+    ['100'],
+  );
+  assert.deepEqual(
+    filterGrowthCases(spendCases, {
+      ...spendFilters,
+      [key]: { metric: 'spend', min: '0', max: '0' },
+    }).map((item) => item.id),
+    ['200'],
+    'Missing spend must not match zero in either filter.',
+  );
+  assert.deepEqual(
+    restoreGrowthFilters(spendFilters, new URLSearchParams(), 'И31', ['И31'])[
+      key
+    ],
+    spendFilters[key],
+  );
+}
+const spendUrl = restoreGrowthFilters(
+  {},
+  new URLSearchParams(
+    'growthMetric=spend&growthMetricMin=10,25&growthMetricMax=30.75&growthExtraMetric=spend&growthExtraMin=0&growthExtraMax=20.5',
+  ),
+  'И31',
+  ['И31'],
+);
+assert.deepEqual(spendUrl.metric, {
+  metric: 'spend',
+  min: '10,25',
+  max: '30.75',
+});
+assert.deepEqual(spendUrl.extra, { metric: 'spend', min: '0', max: '20.5' });
 assert.equal(
   filterGrowthCases(zero, {
     ...defaultGrowthFilters(),
